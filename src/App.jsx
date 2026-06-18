@@ -272,14 +272,15 @@ const MODULES = {
 };
 
 // ── AudioBtn ──────────────────────────────────────────────────────────────────
-function AudioBtn({ text, size }) {
+function AudioBtn({ text, tl, size }) {
   size = size || 18;
   const [state, setState] = useState("idle");
 
   function handlePlay(e, slow) {
     e.stopPropagation();
     setState(slow ? "slow" : "playing");
-    speak(text, slow);
+    // Send transliteration for better pronunciation, fallback to arabic script
+    speak(tl || text, slow);
     setTimeout(function() { setState("idle"); }, slow ? 3500 : 2000);
   }
 
@@ -366,7 +367,7 @@ function VocabCard({ item }) {
           <div style={{ fontSize: 15, color: T.gold, textAlign: "center", fontStyle: "italic" }}>{item.tl}</div>
           {item.note && <div style={{ fontSize: 11, color: "#8ab4ac", textAlign: "center" }}>💡 {item.note}</div>}
           <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-            <AudioBtn text={item.ar} />
+            <AudioBtn text={item.ar} tl={item.tl} />
           </div>
         </>
       )}
@@ -391,7 +392,7 @@ function SentenceCard({ item }) {
         <div style={{ fontSize: 26, fontWeight: 700, color: T.ink, direction: "rtl", fontFamily: "serif", flex: 1, textAlign: "right" }}>
           {item.ar}
         </div>
-        <AudioBtn text={item.ar} />
+        <AudioBtn text={item.ar} tl={item.tl} />
       </div>
       <div style={{ fontSize: 14, fontStyle: "italic", color: T.blue }}>{item.tl}</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: T.ink }}>{item.fr}</div>
