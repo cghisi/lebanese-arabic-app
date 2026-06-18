@@ -3,7 +3,6 @@
 // We send the transliteration wrapped in SSML with spell-out to guide pronunciation
 
 export const config = {
-  runtime: 'nodejs18.x',
   api: { bodyParser: { sizeLimit: '1mb' } },
 };
 
