@@ -17,11 +17,24 @@ const T = {
 
 // ── TTS — via /api/tts Vercel proxy → Azure ar-LB-RamiNeural ─────────────────
 let currentAudio = null;
+let currentObjectURL = null;
 
 async function speak(text, slow) {
-  try {
-    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+  // Stop and fully destroy previous audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
+    currentAudio.src = "";
+    currentAudio.load(); // iOS requires load() after clearing src
+    currentAudio = null;
+  }
+  if (currentObjectURL) {
+    URL.revokeObjectURL(currentObjectURL);
+    currentObjectURL = null;
+  }
 
+  try {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,9 +45,18 @@ async function speak(text, slow) {
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    currentObjectURL = url;
+
+    const audio = new Audio();
+    audio.src = url; // set src after creation — more reliable on iOS
     currentAudio = audio;
-    audio.onended = function() { URL.revokeObjectURL(url); };
+
+    audio.onended = function() {
+      URL.revokeObjectURL(url);
+      currentObjectURL = null;
+      currentAudio = null;
+    };
+
     await audio.play();
 
   } catch (err) {
