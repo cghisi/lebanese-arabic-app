@@ -91,7 +91,7 @@ function EmojiImg({ emoji, peepSeed, size = 90 }) {
 // ── Open Peeps (via DiceBear) — hand-drawn human characters, CC0 ──────────────
 // Works on Vercel (real browser, no sandbox CORS restrictions)
 function peepsUrl(seed) {
-  return `https://api.dicebear.com/9.x/open-peeps/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
+  return `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
 }
 
 function PeepImg({ seed, size = 100 }) {
