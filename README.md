@@ -39,8 +39,8 @@ Dans Vercel → ton projet → Settings → Environment Variables :
 
 | Name | Value |
 |------|-------|
-| `AZURE_SPEECH_KEY` | `` |
-| `AZURE_SPEECH_REGION` | `` |
+| `AZURE_SPEECH_KEY` | `3CwsXIGC2kI3nnIv35pLhETciKpfxklbaWGf21ZXfiT6EIGT4mIeJQQJ99CFACYeBjFXJ3w3AAAYACOGiXX0` |
+| `AZURE_SPEECH_REGION` | `eastus` |
 
 → Clique "Save" puis "Redeploy"
 
