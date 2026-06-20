@@ -1,42 +1,54 @@
 import { useState, useRef, useEffect } from "react";
 
-// ── Tokens ────────────────────────────────────────────────────────────────────
-const T = {
-  ink:      "#0F0F0F",
-  paper:    "#F7F4EE",
-  blue:     "#1B4FD8",
-  gold:     "#C9963A",
-  muted:    "#6B6560",
-  border:   "#DDD9D0",
-  card:     "#FFFFFF",
-  green:    "#1A7A4A",
-  red:      "#C0392B",
-  blueSoft: "#EBF0FD",
-  goldSoft: "#FDF5E6",
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const C = {
+  paper:  "#FAF9F7",
+  ink:    "#1C1B1A",
+  muted:  "#7A756D",
+  border: "#E8E4DE",
+  card:   "#FFFFFF",
+  sage:   "#4A5D52",
+  terra:  "#B5654A",
+  sageSoft: "#EDF1EE",
+  green:  "#3F7A4F",
+  red:    "#B5453A",
 };
 
 // ── TTS — via /api/tts Vercel proxy → Azure ar-LB-RamiNeural ─────────────────
 let currentAudio = null;
+let currentObjectURL = null;
 
 async function speak(text, slow) {
-  try {
-    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
+    currentAudio.src = "";
+    currentAudio.load();
+    currentAudio = null;
+  }
+  if (currentObjectURL) {
+    URL.revokeObjectURL(currentObjectURL);
+    currentObjectURL = null;
+  }
 
+  try {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, slow: !!slow }),
     });
-
     if (!res.ok) throw new Error("TTS proxy error: " + res.status);
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAudio = audio;
-    audio.onended = function() { URL.revokeObjectURL(url); };
-    await audio.play();
+    currentObjectURL = url;
 
+    const audio = new Audio();
+    audio.src = url;
+    currentAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); currentObjectURL = null; currentAudio = null; };
+    await audio.play();
   } catch (err) {
     console.warn("TTS failed, falling back to browser:", err);
     if (!window.speechSynthesis) return;
@@ -51,140 +63,202 @@ async function speak(text, slow) {
   }
 }
 
-function unlockAudio(cb) { if (cb) cb(); }
-function loadVoices() { return null; }
+// ── Twemoji — high-res cartoon-style illustrations (CC-BY 4.0, free CDN) ──────
+function twemojiUrl(emoji) {
+  const codepoints = Array.from(emoji)
+    .map(c => c.codePointAt(0).toString(16))
+    .filter(cp => cp !== "fe0f")
+    .join("-");
+  return `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${codepoints}.svg`;
+}
 
-// ── Data ──────────────────────────────────────────────────────────────────────
-const LEVELS = [
-  { id: "beginner",     fr: "Débutant",      desc: "Mots essentiels & premières phrases" },
-  { id: "intermediate", fr: "Intermédiaire", desc: "Conversations du quotidien" },
-  { id: "advanced",     fr: "Avancé",        desc: "Expressions idiomatiques & nuances" },
+function EmojiImg({ emoji, peepSeed, size = 90 }) {
+  const [failed, setFailed] = useState(false);
+  if (peepSeed) return <PeepImg seed={peepSeed} size={size} />;
+  if (failed) {
+    return <span style={{ fontSize: size * 0.85, lineHeight: 1 }}>{emoji}</span>;
+  }
+  return (
+    <img
+      src={twemojiUrl(emoji)}
+      alt={emoji}
+      style={{ width: size, height: size, objectFit: "contain" }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ── Open Peeps (via DiceBear) — hand-drawn human characters, CC0 ──────────────
+// Works on Vercel (real browser, no sandbox CORS restrictions)
+function peepsUrl(seed) {
+  return `https://api.dicebear.com/9.x/open-peeps/svg?seed=${encodeURIComponent(seed)}&backgroundColor=transparent`;
+}
+
+function PeepImg({ seed, size = 100 }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span style={{ fontSize: size * 0.7 }}>🧑</span>;
+  return (
+    <img
+      src={peepsUrl(seed)}
+      alt=""
+      style={{ width: size, height: size, objectFit: "contain" }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ── DATA ──────────────────────────────────────────────────────────────────────
+// Beginner = picto mode (no reading required) — every word has an emoji
+// Intermediate/Advanced = text mode (for the parent / older reader)
+
+const KID_MODULES = [
+  {
+    id: "family", title: "Famille", icon: "👨‍👩‍👧",
+    items: [
+      { ar: "مامَا",   tl: "Māma",   emoji: "👩", peepSeed: "mama-lebanon" },
+      { ar: "بابَا",   tl: "Bāba",   emoji: "👨", peepSeed: "baba-lebanon" },
+      { ar: "تِيتَا",  tl: "Teta",   emoji: "👵", peepSeed: "teta-grandma" },
+      { ar: "جِدُّو",  tl: "Jeddo",  emoji: "👴", peepSeed: "jeddo-grandpa" },
+      { ar: "خَيِّي",  tl: "Khayye", emoji: "👦", peepSeed: "khayye-brother" },
+      { ar: "خْتِي",   tl: "Khté",   emoji: "👧", peepSeed: "khte-sister" },
+    ],
+  },
+  {
+    id: "animals", title: "Animaux", icon: "🐾",
+    items: [
+      { ar: "قَطّ",    tl: "Aṭṭ",    emoji: "🐱" },
+      { ar: "كَلْب",   tl: "Kalb",   emoji: "🐶" },
+      { ar: "طَيْر",   tl: "Ṭeir",   emoji: "🐦" },
+      { ar: "سَمَكِة",  tl: "Samake", emoji: "🐟" },
+      { ar: "حْصان",   tl: "Ḥṣān",   emoji: "🐴" },
+      { ar: "أَرْنَب",  tl: "Arnab",  emoji: "🐰" },
+    ],
+  },
+  {
+    id: "numbers", title: "Nombres", icon: "🔢",
+    items: [
+      { ar: "وَاحَد",   tl: "Wāḥad", emoji: "1️⃣" },
+      { ar: "تْنِين",   tl: "Tnayn", emoji: "2️⃣" },
+      { ar: "تْلاتَة",  tl: "Tlāte", emoji: "3️⃣" },
+      { ar: "أَرْبَعَة", tl: "Arbaʿa",emoji: "4️⃣" },
+      { ar: "خَمْسَة",   tl: "Khamse",emoji: "5️⃣" },
+    ],
+  },
+  {
+    id: "food", title: "Manger", icon: "🍽️",
+    items: [
+      { ar: "خُبْز",    tl: "Khubz",   emoji: "🍞" },
+      { ar: "حَلِيب",   tl: "Ḥalīb",   emoji: "🥛" },
+      { ar: "تُفّاحَة",  tl: "Tuffāḥa", emoji: "🍎" },
+      { ar: "مَوْزَة",   tl: "Mōze",    emoji: "🍌" },
+      { ar: "جُبْنِة",   tl: "Jubne",   emoji: "🧀" },
+      { ar: "مَيّ",      tl: "Mayy",    emoji: "💧" },
+    ],
+  },
+  {
+    id: "feelings", title: "Émotions", icon: "🙂",
+    items: [
+      { ar: "مَبْسوط",  tl: "Mabsūṭ", emoji: "😄" },
+      { ar: "زَعْلان",  tl: "Zaʿlān", emoji: "😢" },
+      { ar: "تَعْبان",  tl: "Taʿbān", emoji: "😴" },
+      { ar: "خايِف",   tl: "Khāyif", emoji: "😨" },
+      { ar: "بْحِبَّك",  tl: "Bḥibbak",emoji: "❤️" },
+    ],
+  },
+  {
+    id: "colors", title: "Couleurs", icon: "🎨",
+    items: [
+      { ar: "أَحْمَر",  tl: "Aḥmar",  emoji: "🔴" },
+      { ar: "أَزْرَق",  tl: "Azraʾ",  emoji: "🔵" },
+      { ar: "أَصْفَر",  tl: "Aṣfar",  emoji: "🟡" },
+      { ar: "أَخْضَر",  tl: "Akhḍar", emoji: "🟢" },
+      { ar: "أَبْيَض",  tl: "Abyaḍ",  emoji: "⚪" },
+    ],
+  },
+  {
+    id: "body", title: "Corps", icon: "🧍",
+    items: [
+      { ar: "إِيد",    tl: "Īd",    emoji: "✋" },
+      { ar: "عِين",    tl: "ʿEin",  emoji: "👁️" },
+      { ar: "راس",     tl: "Rās",   emoji: "🗣️" },
+      { ar: "رِجْل",    tl: "Rijl",  emoji: "🦶" },
+      { ar: "قَلْب",    tl: "Alb",   emoji: "❤️" },
+    ],
+  },
+  {
+    id: "actions", title: "Actions", icon: "🏃",
+    items: [
+      { ar: "نام",     tl: "Nām",    emoji: "😴" },
+      { ar: "كِل",      tl: "Kil",    emoji: "🍴" },
+      { ar: "إِشْرَب",   tl: "Ishrab", emoji: "🥤" },
+      { ar: "إِلْعَب",   tl: "Ilʿab",  emoji: "🧸" },
+      { ar: "رْكُض",    tl: "Rkoḍ",   emoji: "🏃" },
+    ],
+  },
 ];
 
-const MODULES = {
-  beginner: [
-    {
-      id: "greetings", icon: "👋", titleFr: "Salutations",
-      vocab: [
-        { ar: "مرحبا",      tl: "Marḥaba",         fr: "Bonjour / Salut",       note: "La salutation universelle" },
-        { ar: "كيفك؟",     tl: "Kīfak? / Kīfik?", fr: "Comment tu vas ?",       note: "-ak (homme) / -ik (femme)" },
-        { ar: "منيح",       tl: "Mnīḥ",            fr: "Bien / Bon",             note: "Mot clé du dialecte libanais" },
-        { ar: "شكراً",      tl: "Shukran",         fr: "Merci",                  note: "" },
-        { ar: "عفواً",      tl: "ʿAfwan",          fr: "De rien / Pardon",       note: "" },
-        { ar: "صباح الخير", tl: "Ṣabāḥ el-kheir", fr: "Bonjour (matin)",        note: "Réponse : Ṣabāḥ el-nūr" },
-        { ar: "مساء الخير", tl: "Masā el-kheir",  fr: "Bonsoir",                note: "Réponse : Masā el-nūr" },
-        { ar: "يلا باي",    tl: "Yalla bye",       fr: "Au revoir !",            note: "Mix arabe-anglais typiquement libanais" },
-      ],
-      sentences: [
-        { ar: "مرحبا! كيفك؟",                 tl: "Marḥaba! Kīfak?",               fr: "Bonjour ! Comment tu vas ?",                structure: "Salutation + Question" },
-        { ar: "منيح كتير، شكراً",              tl: "Mnīḥ ktīr, shukran",            fr: "Très bien, merci",                          structure: "Adjectif + ktīr (très) + merci" },
-        { ar: "شو اسمك؟",                     tl: "Shu ismak?",                    fr: "Comment tu t'appelles ?",                   structure: "Shu (quoi) + ism (nom) + -ak (toi)" },
-        { ar: "من وين انت؟",                  tl: "Min wein inta?",                fr: "Tu viens d'où ?",                           structure: "Min (de) + wein (où) + inta (tu, masc.)" },
-        { ar: "أنا من كندا، بس أصلي لبناني",  tl: "Ana min Kanada, bas aṣlī Libnānī", fr: "Je suis du Canada, mais d'origine libanaise", structure: "Ana min + pays + bas (mais) + aṣlī (mes origines)" },
-      ],
-    },
-    {
-      id: "numbers", icon: "🔢", titleFr: "Nombres & Temps",
-      vocab: [
-        { ar: "واحد",   tl: "Wāḥad",  fr: "Un",          note: "" },
-        { ar: "تنين",   tl: "Tnayn",  fr: "Deux",         note: "Libanais : tnayn (MSA : ithnān)" },
-        { ar: "تلاتة",  tl: "Tlāte",  fr: "Trois",        note: "" },
-        { ar: "أربعة",  tl: "Arbaʿa", fr: "Quatre",       note: "" },
-        { ar: "خمسة",   tl: "Khamse", fr: "Cinq",         note: "" },
-        { ar: "عشرة",   tl: "ʿAshra", fr: "Dix",          note: "" },
-        { ar: "هلق",    tl: "Hallaʾ", fr: "Maintenant",   note: "Très libanais" },
-        { ar: "بكرا",   tl: "Bukra",  fr: "Demain",       note: "" },
-        { ar: "امبارح", tl: "Embāriḥ",fr: "Hier",         note: "" },
-      ],
-      sentences: [
-        { ar: "قديش الساعة؟",      tl: "Addeish el-sāʿa?",      fr: "Quelle heure est-il ?",       structure: "Addeish (combien) + sāʿa (heure)" },
-        { ar: "الساعة تلاتة",      tl: "El-sāʿa tlāte",         fr: "Il est trois heures",         structure: "El-sāʿa + nombre" },
-        { ar: "قديش هالشي؟",       tl: "Addeish hal-shī?",      fr: "Combien ça coûte ?",          structure: "Addeish + hal (ce) + shī (chose)" },
-        { ar: "بكرا رح نشوف بعض", tl: "Bukra raḥ nshūf baʿd", fr: "Demain on se voit",           structure: "Bukra + raḥ (futur) + verbe" },
-        { ar: "هلق ما عندي وقت",  tl: "Hallaʾ mā ʿandī waʾt", fr: "Là je n'ai pas le temps",    structure: "Hallaʾ + mā (pas) + ʿandī (j'ai)" },
-      ],
-    },
-    {
-      id: "family", icon: "👨‍👩‍👧", titleFr: "Famille",
-      vocab: [
-        { ar: "ماما",    tl: "Māma",    fr: "Maman",          note: "" },
-        { ar: "بابا",    tl: "Bāba",    fr: "Papa",           note: "" },
-        { ar: "تيتا",    tl: "Teta",    fr: "Grand-mère",     note: "Très courant au Liban" },
-        { ar: "جدو",     tl: "Jeddo",   fr: "Grand-père",     note: "" },
-        { ar: "خي",      tl: "Khayye",  fr: "Frère",          note: "Forme affectueuse libanaise" },
-        { ar: "ختي",     tl: "Khté",    fr: "Sœur",           note: "" },
-        { ar: "عمو",     tl: "ʿAmmo",   fr: "Oncle",          note: "Aussi pour les hommes plus âgés" },
-        { ar: "حبيبي",   tl: "Ḥabībī",  fr: "Mon chéri (m)", note: "Terme d'affection omniprésent" },
-        { ar: "حبيبتي",  tl: "Ḥabībti", fr: "Ma chérie (f)", note: "" },
-      ],
-      sentences: [
-        { ar: "هيدا اخوي",         tl: "Hayda akhūye",       fr: "C'est mon frère",             structure: "Hayda (c'est lui) + akhūye (mon frère)" },
-        { ar: "عندي تلت ولاد",     tl: "ʿAndī tlāt wlād",   fr: "J'ai trois enfants",          structure: "ʿAndī (j'ai) + nombre + wlād (enfants)" },
-        { ar: "كيف حال ماماتك؟",   tl: "Kīf ḥāl māmātak?", fr: "Comment va ta maman ?",       structure: "Kīf ḥāl (comment va) + māmātak (ta maman)" },
-        { ar: "عيلتي كبيرة كتير",  tl: "ʿEylté kbīre ktīr", fr: "Ma famille est très grande", structure: "ʿEylté (ma famille) + kbīre + ktīr (très)" },
-      ],
-    },
-  ],
+// Adult/reading mode data (intermediate + advanced) — unchanged from before
+const TEXT_MODULES = {
   intermediate: [
     {
       id: "daily", icon: "🌆", titleFr: "Vie quotidienne",
       vocab: [
-        { ar: "يلا",      tl: "Yalla",     fr: "Allez ! On y va !",        note: "LE mot libanais par excellence" },
-        { ar: "شو في؟",   tl: "Shu fī?",   fr: "Qu'est-ce qu'il y a ?",   note: "Shu = quoi (pas mādhā en libanais)" },
-        { ar: "ما في",    tl: "Mā fī",     fr: "Il n'y a pas / Rien",      note: "" },
-        { ar: "بدي",      tl: "Baddī",     fr: "Je veux",                  note: "Pas urīd — baddī est le mot libanais" },
-        { ar: "ما بدي",   tl: "Mā baddī",  fr: "Je ne veux pas",           note: "" },
-        { ar: "قديش؟",    tl: "Addeish?",  fr: "Combien ?",                note: "" },
-        { ar: "بس",       tl: "Bas",       fr: "Mais / Seulement / Stop",  note: "3 sens selon le contexte !" },
-        { ar: "لازم",     tl: "Lāzim",     fr: "Il faut / Je dois",        note: "" },
-        { ar: "مش لازم",  tl: "Mish lāzim",fr: "Ce n'est pas obligé",     note: "Mish = négation libanaise" },
-        { ar: "والله",    tl: "Wallāh",    fr: "Franchement / Vraiment",   note: "Juron doux, très fréquent" },
+        { ar: "يَلّا",      tl: "Yalla",      fr: "Allez ! On y va !",       note: "LE mot libanais par excellence" },
+        { ar: "شو فِي؟",    tl: "Shu fī?",    fr: "Qu'est-ce qu'il y a ?",  note: "Shu = quoi (pas mādhā)" },
+        { ar: "ما فِي",     tl: "Mā fī",      fr: "Il n'y a pas / Rien",     note: "" },
+        { ar: "بَدِّي",      tl: "Baddī",      fr: "Je veux",                 note: "Pas urīd — baddī est libanais" },
+        { ar: "ما بَدِّي",   tl: "Mā baddī",   fr: "Je ne veux pas",          note: "" },
+        { ar: "قَدِّيش؟",    tl: "Addeish?",   fr: "Combien ?",               note: "" },
+        { ar: "بَس",        tl: "Bas",        fr: "Mais / Seulement / Stop", note: "3 sens selon le contexte !" },
+        { ar: "لازِم",      tl: "Lāzim",      fr: "Il faut / Je dois",       note: "" },
+        { ar: "مِش لازِم",  tl: "Mish lāzim", fr: "Ce n'est pas obligé",    note: "Mish = négation libanaise" },
+        { ar: "وَاللَّه",    tl: "Wallāh",     fr: "Franchement / Vraiment",  note: "Juron doux, très fréquent" },
       ],
       sentences: [
-        { ar: "شو عم تعمل هلق؟",          tl: "Shu ʿam taʿmal hallaʾ?",      fr: "Qu'est-ce que tu fais là ?",       structure: "Shu + ʿam (présent continu) + verbe + hallaʾ" },
-        { ar: "عم شتغل من البيت",          tl: "ʿam shtghel min el-beit",      fr: "Je travaille de la maison",        structure: "ʿam (en train de) + verbe + min el-beit" },
-        { ar: "بدي روح عالسوبرماركت",      tl: "Baddī rūḥ ʿa el-supermarket", fr: "Je veux aller au supermarché",    structure: "Baddī (je veux) + rūḥ (aller) + lieu" },
-        { ar: "ما عندي مشكلة",            tl: "Mā ʿandī mushkle",             fr: "Pas de problème / Pas de souci",  structure: "Mā (pas) + ʿandī (j'ai) + mushkle" },
-        { ar: "شو رأيك؟",                 tl: "Shu raʾyak?",                  fr: "Tu en penses quoi ?",             structure: "Shu (quoi) + raʾyak (ton avis)" },
-        { ar: "والله ما بعرف",            tl: "Wallāh mā baʿrif",             fr: "Franchement je sais pas",         structure: "Wallāh + mā (pas) + baʿrif (je sais)" },
+        { ar: "شو عَم تَعْمَل هَلَّق؟",         tl: "Shu ʿam taʿmal hallaʾ?",      fr: "Qu'est-ce que tu fais là ?",      structure: "Shu + ʿam (présent continu) + verbe" },
+        { ar: "عَم شْتَغَل مِن البِيت",          tl: "ʿam shtghel min el-beit",     fr: "Je travaille de la maison",       structure: "ʿam (en train de) + verbe + min el-beit" },
+        { ar: "بَدِّي رُوح عَالسوبِرْماركِت",     tl: "Baddī rūḥ ʿa el-supermarket",fr: "Je veux aller au supermarché",   structure: "Baddī (je veux) + rūḥ (aller) + lieu" },
+        { ar: "ما عِنْدِي مُشْكِلَة",            tl: "Mā ʿandī mushkle",            fr: "Pas de problème / Pas de souci", structure: "Mā + ʿandī (j'ai) + mushkle" },
+        { ar: "شو رَأْيَك؟",                    tl: "Shu raʾyak?",                 fr: "Tu en penses quoi ?",            structure: "Shu (quoi) + raʾyak (ton avis)" },
+        { ar: "وَاللَّه ما بَعْرِف",             tl: "Wallāh mā baʿrif",            fr: "Franchement je sais pas",        structure: "Wallāh + mā (pas) + baʿrif" },
       ],
     },
     {
       id: "feelings", icon: "💬", titleFr: "Émotions & Opinions",
       vocab: [
-        { ar: "مبسوط",     tl: "Mabsūṭ",   fr: "Content / Heureux",       note: "-a au féminin : mabsūṭa" },
-        { ar: "زعلان",     tl: "Zaʿlān",   fr: "Triste / Fâché",          note: "-e féminin : zaʿlāne" },
-        { ar: "تعبان",     tl: "Taʿbān",   fr: "Fatigué / Épuisé",        note: "-e féminin : taʿbāne" },
-        { ar: "كتير حلو",  tl: "Ktīr ḥelo",fr: "Très beau / Très bien",   note: "Ḥelo = beau, bon, sympa" },
-        { ar: "يسلمو",     tl: "Yislamo",  fr: "Merci du fond du cœur",   note: "Litt. 'que tes mains soient bénies'" },
-        { ar: "الله!",     tl: "Allāh!",   fr: "Waouh ! Mon Dieu !",      note: "Surprise, admiration" },
-        { ar: "ولاه",      tl: "Wlāh",     fr: "Sérieusement ?! Oh là",   note: "Très expressif, très libanais" },
-        { ar: "ما شاء الله",tl: "Māshallāh",fr: "Comme c'est beau !",     note: "Admiration + protection du mauvais œil" },
+        { ar: "مَبْسوط",       tl: "Mabsūṭ",   fr: "Content / Heureux",      note: "-a au féminin : mabsūṭa" },
+        { ar: "زَعْلان",       tl: "Zaʿlān",   fr: "Triste / Fâché",         note: "-e féminin : zaʿlāne" },
+        { ar: "تَعْبان",       tl: "Taʿbān",   fr: "Fatigué / Épuisé",       note: "-e féminin : taʿbāne" },
+        { ar: "كْتِير حِلْو",   tl: "Ktīr ḥelo",fr: "Très beau / Très bien",  note: "Ḥelo = beau, bon, sympa" },
+        { ar: "يِسْلَمو",       tl: "Yislamo",  fr: "Merci du fond du cœur",  note: "'que tes mains soient bénies'" },
+        { ar: "اَللَّه!",       tl: "Allāh!",   fr: "Waouh ! Mon Dieu !",     note: "Surprise, admiration" },
+        { ar: "وْلاه",         tl: "Wlāh",     fr: "Sérieusement ?! Oh là",  note: "Très expressif, très libanais" },
+        { ar: "ما شاءَ اللَّه", tl: "Māshallāh",fr: "Comme c'est beau !",    note: "Admiration + contre mauvais œil" },
       ],
       sentences: [
-        { ar: "أنا مبسوط كتير",             tl: "Ana mabsūṭ ktīr",              fr: "Je suis tellement content",       structure: "Ana + état + ktīr (très)" },
-        { ar: "بحبك كتير",                  tl: "Bḥibbak ktīr",                 fr: "Je t'aime beaucoup",              structure: "Bḥibb- (j'aime) + -ak/-ik (toi) + ktīr" },
-        { ar: "حاسس حالي تعبان اليوم",      tl: "Ḥāssis ḥāle taʿbān el-yōm",  fr: "Je me sens fatigué aujourd'hui",  structure: "Ḥāssis ḥāle (je me sens) + état + el-yōm" },
-        { ar: "هالأكل كتير حلو، يسلمو إيديكي", tl: "Hal-akl ktīr ḥelo, yislamo īdēki", fr: "Ce repas est délicieux, bravo !", structure: "Hal- (ce) + objet + ḥelo + yislamo (formule de gratitude)" },
+        { ar: "أَنا مَبْسوط كْتِير",                    tl: "Ana mabsūṭ ktīr",                   fr: "Je suis tellement content",       structure: "Ana + état + ktīr (très)" },
+        { ar: "بْحِبَّك كْتِير",                         tl: "Bḥibbak ktīr",                      fr: "Je t'aime beaucoup",              structure: "Bḥibb- (j'aime) + -ak/-ik + ktīr" },
+        { ar: "حاسِس حالِي تَعْبان اليَوم",              tl: "Ḥāssis ḥāle taʿbān el-yōm",        fr: "Je me sens fatigué aujourd'hui",  structure: "Ḥāssis ḥāle (je me sens) + état" },
+        { ar: "هَالأَكَل كْتِير حِلْو، يِسْلَمو إِيدِيكِي", tl: "Hal-akl ktīr ḥelo, yislamo īdēki", fr: "Ce repas est délicieux, bravo !",  structure: "Hal- (ce) + objet + ḥelo + yislamo" },
       ],
     },
     {
       id: "transport", icon: "🚗", titleFr: "Déplacements",
       vocab: [
-        { ar: "وين؟",      tl: "Wein?",        fr: "Où ?",                note: "Wein, pas ayna en libanais" },
-        { ar: "كيف بروح؟", tl: "Kīf brūḥ?",   fr: "Comment j'y vais ?",  note: "" },
-        { ar: "قريب",      tl: "Arīb",         fr: "Proche / Près",       note: "" },
-        { ar: "بعيد",      tl: "Baʿīd",        fr: "Loin",                note: "" },
-        { ar: "دغري",      tl: "Dughri",       fr: "Tout droit",          note: "Mot d'origine turque !" },
-        { ar: "عالشمال",   tl: "ʿa el-shamāl", fr: "À gauche",           note: "" },
-        { ar: "عاليمين",   tl: "ʿa el-yamīn",  fr: "À droite",           note: "" },
-        { ar: "سرفيس",     tl: "Service",      fr: "Taxi collectif",      note: "Transport typique au Liban" },
+        { ar: "وِين؟",       tl: "Wein?",         fr: "Où ?",               note: "Wein, pas ayna en libanais" },
+        { ar: "كِيف بْروح؟",  tl: "Kīf brūḥ?",    fr: "Comment j'y vais ?", note: "" },
+        { ar: "قْرِيب",       tl: "Arīb",          fr: "Proche / Près",      note: "" },
+        { ar: "بْعِيد",       tl: "Baʿīd",         fr: "Loin",               note: "" },
+        { ar: "دُغْرِي",       tl: "Dughri",        fr: "Tout droit",         note: "Mot d'origine turque !" },
+        { ar: "عَالشِّمال",    tl: "ʿa el-shamāl",  fr: "À gauche",           note: "" },
+        { ar: "عَالْيَمِين",   tl: "ʿa el-yamīn",   fr: "À droite",           note: "" },
+        { ar: "سِرْفِيس",      tl: "Service",       fr: "Taxi collectif",     note: "Transport typique au Liban" },
       ],
       sentences: [
-        { ar: "وين المطار؟",                       tl: "Wein el-maṭār?",                     fr: "Où est l'aéroport ?",              structure: "Wein (où) + lieu" },
-        { ar: "كيف بروح عالمطار؟",                 tl: "Kīf brūḥ ʿa el-maṭār?",             fr: "Comment je vais à l'aéroport ?",  structure: "Kīf (comment) + brūḥ (je vais) + ʿa (à) + lieu" },
-        { ar: "روح دغري وبعدين دور عالشمال",       tl: "Rūḥ dughri w baʿdein dūr ʿa el-shamāl", fr: "Vas tout droit puis tourne à gauche", structure: "Impératif + dughri + w (et) + baʿdein (puis)" },
-        { ar: "قديش تعرفني عالمحطة؟",              tl: "Addeish taʿrufnī ʿa el-maḥaṭṭa?",  fr: "Combien pour la gare ?",          structure: "Addeish (combien) + verbe + ʿa (à) + lieu" },
+        { ar: "وِين المَطار؟",                         tl: "Wein el-maṭār?",                        fr: "Où est l'aéroport ?",              structure: "Wein (où) + lieu" },
+        { ar: "كِيف بْروح عَالمَطار؟",                  tl: "Kīf brūḥ ʿa el-maṭār?",                fr: "Comment je vais à l'aéroport ?",  structure: "Kīf + brūḥ (je vais) + ʿa + lieu" },
+        { ar: "رُوح دُغْرِي وبَعْدِين دور عَالشِّمال",    tl: "Rūḥ dughri w baʿdein dūr ʿa el-shamāl",fr: "Tout droit puis tourne à gauche",  structure: "Impératif + dughri + w + baʿdein" },
+        { ar: "قَدِّيش تَعَرَّفْنِي عَالمَحَطَّة؟",         tl: "Addeish taʿrufnī ʿa el-maḥaṭṭa?",     fr: "Combien pour la gare ?",          structure: "Addeish + verbe + ʿa + lieu" },
       ],
     },
   ],
@@ -192,323 +266,200 @@ const MODULES = {
     {
       id: "idioms", icon: "🎭", titleFr: "Expressions idiomatiques",
       vocab: [
-        { ar: "يعطيك العافية",  tl: "Yʿaṭīk el-ʿāfye",  fr: "Bravo / Bon courage",         note: "Pour remercier quelqu'un qui travaille" },
-        { ar: "على راسي",       tl: "ʿAla rāsī",         fr: "Avec plaisir / Bien sûr",     note: "Marque de respect absolu" },
-        { ar: "قلبك أبيض",     tl: "Albak abyaḍ",       fr: "Tu as un cœur d'or",          note: "Grand compliment de générosité" },
-        { ar: "طول بالك",       tl: "Ṭawwel bālak",      fr: "Sois patient",                note: "Litt. 'allonge ton esprit'" },
-        { ar: "الله يرحمو",     tl: "Allah yirḥamo",     fr: "Qu'il repose en paix",        note: "En parlant d'un défunt" },
-        { ar: "إنشالله",        tl: "Inshallāh",         fr: "Si Dieu le veut",             note: "Peut signifier oui, peut-être ou non selon le ton !" },
-        { ar: "الحمد لله",      tl: "El-ḥamdu lillāh",  fr: "Dieu merci / Tout va bien",   note: "Réponse courante à 'comment tu vas'" },
-        { ar: "يخزي العين",    tl: "Ykhzī el-ʿein",    fr: "Contre le mauvais œil",       note: "Dit après un compliment" },
+        { ar: "يِعْطِيك العافْيِة", tl: "Yʿaṭīk el-ʿāfye",  fr: "Bravo / Bon courage",       note: "Pour remercier quelqu'un qui travaille" },
+        { ar: "عَلى راسِي",         tl: "ʿAla rāsī",          fr: "Avec plaisir / Bien sûr",   note: "Marque de respect absolu" },
+        { ar: "قَلْبَك أَبْيَض",     tl: "Albak abyaḍ",        fr: "Tu as un cœur d'or",        note: "Grand compliment de générosité" },
+        { ar: "طَوِّل بالَك",        tl: "Ṭawwel bālak",       fr: "Sois patient",              note: "Litt. 'allonge ton esprit'" },
+        { ar: "اللَّه يِرْحَمو",     tl: "Allah yirḥamo",      fr: "Qu'il repose en paix",      note: "En parlant d'un défunt" },
+        { ar: "إِنْشَاللَّه",         tl: "Inshallāh",          fr: "Si Dieu le veut",           note: "Oui, peut-être ou non selon le ton !" },
+        { ar: "الحَمْدُ لِلَّه",      tl: "El-ḥamdu lillāh",   fr: "Dieu merci / Tout va bien", note: "Réponse à 'comment tu vas'" },
+        { ar: "يِخْزِي العِين",      tl: "Ykhzī el-ʿein",     fr: "Contre le mauvais œil",     note: "Dit après un compliment" },
       ],
       sentences: [
-        { ar: "يعطيك العافية على كل هالشغل",    tl: "Yʿaṭīk el-ʿāfye ʿala kell hal-shughl", fr: "Bravo pour tout ce travail",          structure: "Formule de bénédiction + ʿala (sur) + objet" },
-        { ar: "إنشالله بكرا يكون أحسن",         tl: "Inshallāh bukra ykūn aḥsan",            fr: "Espérons que demain ce sera mieux",   structure: "Inshallāh + bukra + ykūn (sera) + aḥsan (mieux)" },
-        { ar: "الحمد لله، ما في شي ناقصنا",     tl: "El-ḥamdu lillāh, mā fī shī nāʾisna",   fr: "Dieu merci, on ne manque de rien",    structure: "Formule de gratitude + mā fī (il n'y a pas) + nāʾisna" },
-        { ar: "طول بالك، هالأمور بتمشي",         tl: "Ṭawwel bālak, hal-umūr btimshī",        fr: "Sois patient, les choses avancent",   structure: "Impératif + hal-umūr (ces affaires) + btimshī (marchent)" },
+        { ar: "يِعْطِيك العافْيِة عَلى كِلّ هَالشُّغَل",   tl: "Yʿaṭīk el-ʿāfye ʿala kell hal-shughl",fr: "Bravo pour tout ce travail",         structure: "Formule de bénédiction + ʿala (sur) + objet" },
+        { ar: "إِنْشَاللَّه بُكْرا يْكون أَحْسَن",          tl: "Inshallāh bukra ykūn aḥsan",           fr: "Espérons que demain sera mieux",     structure: "Inshallāh + bukra + ykūn (sera) + aḥsan" },
+        { ar: "الحَمْدُ لِلَّه، ما فِي شِي ناقِصْنا",      tl: "El-ḥamdu lillāh, mā fī shī nāʾisna",  fr: "Dieu merci, on ne manque de rien",   structure: "Formule de gratitude + mā fī (il n'y a pas)" },
+        { ar: "طَوِّل بالَك، هَالأُمور بْتِمْشِي",          tl: "Ṭawwel bālak, hal-umūr btimshī",       fr: "Sois patient, les choses avancent",  structure: "Impératif + hal-umūr + btimshī (marchent)" },
       ],
     },
     {
       id: "storytelling", icon: "🗣️", titleFr: "Raconter & Débattre",
       vocab: [
-        { ar: "يعني",      tl: "Yaʿni",       fr: "C'est-à-dire / Genre",       note: "Mot de remplissage universel libanais" },
-        { ar: "هيك وهيك",  tl: "Hēk w hēk",   fr: "Comme ci comme ça",          note: "" },
-        { ar: "بالظبط",    tl: "Bil-ẓabaṭ",   fr: "Exactement / Précisément",   note: "" },
-        { ar: "مش هيك؟",   tl: "Mish hēk?",   fr: "N'est-ce pas ? Tu vois ?",   note: "Tag question très fréquente" },
-        { ar: "بالعكس",    tl: "Bil-ʿaks",    fr: "Au contraire",               note: "" },
-        { ar: "عالأقل",    tl: "ʿAl-aʾall",   fr: "Au moins",                   note: "" },
-        { ar: "كأنو",      tl: "Kaʾanno",     fr: "Comme si / On dirait que",   note: "" },
-        { ar: "خليني أفهم",tl: "Khallinī afham",fr: "Laisse-moi comprendre",   note: "" },
+        { ar: "يَعْنِي",       tl: "Yaʿni",         fr: "C'est-à-dire / Genre",    note: "Mot de remplissage universel libanais" },
+        { ar: "هِيك وهِيك",    tl: "Hēk w hēk",     fr: "Comme ci comme ça",       note: "" },
+        { ar: "بَالضَّبَط",     tl: "Bil-ẓabaṭ",     fr: "Exactement",              note: "" },
+        { ar: "مِش هِيك؟",     tl: "Mish hēk?",     fr: "N'est-ce pas ?",          note: "Tag question très fréquente" },
+        { ar: "بَالعَكَس",      tl: "Bil-ʿaks",      fr: "Au contraire",            note: "" },
+        { ar: "عَالأَقَل",      tl: "ʿAl-aʾall",     fr: "Au moins",               note: "" },
+        { ar: "كَأَنُّو",        tl: "Kaʾanno",       fr: "Comme si / On dirait que", note: "" },
+        { ar: "خَلِّينِي أَفْهَم", tl: "Khallinī afham",fr: "Laisse-moi comprendre", note: "" },
       ],
       sentences: [
-        { ar: "يعني، بدك تقول إنو ما حدا حكى معك؟", tl: "Yaʿni, baddak tʾūl inno mā ḥada ḥaka maʿak?", fr: "Genre, tu veux dire que personne ne t'a parlé ?", structure: "Yaʿni + baddak tʾūl (tu veux dire) + inno (que)" },
-        { ar: "بالظبط هيدا اللي عم قلو",             tl: "Bil-ẓabaṭ hayda lli ʿam ʾello",               fr: "C'est exactement ce que je dis",                 structure: "Bil-ẓabaṭ + hayda (ça) + lli (que) + ʿam ʾello (je dis)" },
-        { ar: "بالعكس، هيدا بيساعدنا أكتر",          tl: "Bil-ʿaks, hayda bisāʿidna aktar",              fr: "Au contraire, ça nous aide encore plus",          structure: "Bil-ʿaks + hayda + bisāʿidna (aide) + aktar (plus)" },
-        { ar: "خليني أفهم شو اللي صار بالظبط",       tl: "Khallinī afham shu lli ṣār bil-ẓabaṭ",        fr: "Laisse-moi comprendre ce qui s'est passé",       structure: "Khallinī (laisse-moi) + verbe + shu lli ṣār (ce qui s'est passé)" },
+        { ar: "يَعْنِي، بَدَّك تْقول إِنُّو ما حَدا حَكى مَعَك؟", tl: "Yaʿni, baddak tʾūl inno mā ḥada ḥaka maʿak?",fr: "Genre, personne ne t'a parlé ?",      structure: "Yaʿni + baddak tʾūl (tu veux dire) + inno" },
+        { ar: "بَالضَّبَط هَيْدا اللِّي عَم قُلُّو",               tl: "Bil-ẓabaṭ hayda lli ʿam ʾello",             fr: "C'est exactement ce que je dis",     structure: "Bil-ẓabaṭ + hayda + lli (que) + ʿam ʾello" },
+        { ar: "بَالعَكَس، هَيْدا بِيساعِدْنا أَكْتَر",             tl: "Bil-ʿaks, hayda bisāʿidna aktar",           fr: "Au contraire, ça nous aide plus",    structure: "Bil-ʿaks + hayda + bisāʿidna + aktar (plus)" },
+        { ar: "خَلِّينِي أَفْهَم شو اللِّي صار بَالضَّبَط",         tl: "Khallinī afham shu lli ṣār bil-ẓabaṭ",     fr: "Laisse-moi comprendre ce qui s'est passé", structure: "Khallinī + verbe + shu lli ṣār" },
       ],
     },
     {
       id: "culture", icon: "🏛️", titleFr: "Culture & Société",
       vocab: [
-        { ar: "ضيافة",        tl: "Ḍiyāfe",      fr: "Hospitalité",               note: "Valeur cardinale libanaise" },
-        { ar: "تفضل",         tl: "Tfaḍḍal",     fr: "Je vous en prie / Entrez",  note: "Invitation universelle" },
-        { ar: "على صحتك",     tl: "ʿAla ṣaḥtak", fr: "À ta santé !",              note: "Toast libanais" },
-        { ar: "صحتين",        tl: "Ṣaḥtein",     fr: "Bon appétit ! (deux santés)", note: "Réponse : ʿala albak" },
-        { ar: "أهلاً وسهلاً", tl: "Ahlan w sahlan",fr: "Bienvenue !",             note: "Litt. 'comme avec la famille et en terrain facile'" },
-        { ar: "عيب",          tl: "ʿEib",         fr: "C'est honteux / Mal",      note: "Notion sociale forte" },
-        { ar: "مزبوط",        tl: "Mazbuṭ",       fr: "C'est juste / Correct",    note: "" },
-        { ar: "كاسك",         tl: "Kāsak",        fr: "À ta santé (toast) !",     note: "En levant le verre" },
+        { ar: "ضْيافَة",         tl: "Ḍiyāfe",       fr: "Hospitalité",              note: "Valeur cardinale libanaise" },
+        { ar: "تْفَضَّل",          tl: "Tfaḍḍal",      fr: "Je vous en prie / Entrez", note: "Invitation universelle" },
+        { ar: "عَلى صِحَّتَك",     tl: "ʿAla ṣaḥtak",  fr: "À ta santé !",             note: "Toast libanais" },
+        { ar: "صَحْتِين",          tl: "Ṣaḥtein",      fr: "Bon appétit !",            note: "Réponse : ʿala albak" },
+        { ar: "أَهْلاً وسَهْلاً",  tl: "Ahlan w sahlan",fr: "Bienvenue !",             note: "Litt. 'comme avec la famille'" },
+        { ar: "عِيب",             tl: "ʿEib",          fr: "C'est honteux / Mal",     note: "Notion sociale forte" },
+        { ar: "مَزْبوط",           tl: "Mazbuṭ",        fr: "C'est juste / Correct",   note: "" },
+        { ar: "كاسَك",             tl: "Kāsak",         fr: "À ta santé (toast) !",    note: "En levant le verre" },
       ],
       sentences: [
-        { ar: "أهلاً وسهلاً، البيت بيتك",              tl: "Ahlan w sahlan, el-beit betak",                fr: "Bienvenue, cette maison est la tienne",       structure: "Formule d'accueil + el-beit betak (la maison est tienne)" },
-        { ar: "تفضل، اتفضل معنا",                      tl: "Tfaḍḍal, itfaḍḍal maʿna",                     fr: "Je t'en prie, viens avec nous",               structure: "Tfaḍḍal (invitation) + maʿna (avec nous)" },
-        { ar: "الأكل اللبناني من أحسن أكل بالعالم",   tl: "El-akl el-Libnānī min aḥsan akl bil-ʿālam",   fr: "La cuisine libanaise est parmi les meilleures", structure: "Sujet + min aḥsan (parmi les meilleurs) + bil-ʿālam (au monde)" },
-        { ar: "الضيافة عنا مش بس تقليد، هي قيمة",    tl: "El-ḍiyāfe ʿinna mish bas taʾlīd, hiye ʾīme", fr: "L'hospitalité chez nous c'est une valeur",    structure: "Sujet + mish bas (pas seulement) + taʾlīd + hiye (c'est) + valeur" },
+        { ar: "أَهْلاً وسَهْلاً، البَيْت بَيْتَك",                tl: "Ahlan w sahlan, el-beit betak",               fr: "Bienvenue, cette maison est la tienne",       structure: "Formule d'accueil + el-beit betak" },
+        { ar: "تْفَضَّل، اِتْفَضَّل مَعْنا",                       tl: "Tfaḍḍal, itfaḍḍal maʿna",                    fr: "Je t'en prie, viens avec nous",               structure: "Tfaḍḍal (invitation) + maʿna (avec nous)" },
+        { ar: "الأَكَل اللُّبْناني مِن أَحْسَن أَكَل بَالعالَم",   tl: "El-akl el-Libnānī min aḥsan akl bil-ʿālam",  fr: "La cuisine libanaise est parmi les meilleures", structure: "Sujet + min aḥsan + bil-ʿālam (au monde)" },
+        { ar: "الضْيافَة عِنَّا مِش بَس تَقْلِيد، هِيَ قِيمَة",    tl: "El-ḍiyāfe ʿinna mish bas taʾlīd, hiye ʾīme", fr: "L'hospitalité chez nous c'est une valeur",    structure: "Sujet + mish bas (pas seulement) + hiye (c'est)" },
       ],
     },
   ],
 };
 
-// ── AudioBtn ──────────────────────────────────────────────────────────────────
-function AudioBtn({ text, size }) {
-  size = size || 18;
-  const [state, setState] = useState("idle");
+function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
-  function handlePlay(e, slow) {
-    e.stopPropagation();
-    setState(slow ? "slow" : "playing");
-    speak(text, slow);
-    setTimeout(function() { setState("idle"); }, slow ? 3500 : 2000);
-  }
+// ── KidCard — picto mode, auto-plays audio, big tap targets ───────────────────
+function KidCard({ item, autoPlay }) {
+  useEffect(() => {
+    if (autoPlay) {
+      const t = setTimeout(() => speak(item.ar), 300);
+      return () => clearTimeout(t);
+    }
+  }, [item, autoPlay]);
 
-  return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={function(e) { e.stopPropagation(); }}>
-      <button
-        onClick={function(e) { handlePlay(e, false); }}
-        title="Écouter"
-        style={{
-          background: state === "playing" ? T.blue : "transparent",
-          border: "1.5px solid " + (state === "playing" ? T.blue : T.border),
-          borderRadius: "50%",
-          width: size + 16,
-          height: size + 16,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          transition: "all 0.2s",
-          flexShrink: 0,
-          color: state === "playing" ? "white" : T.muted,
-        }}
-      >
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-        </svg>
-      </button>
-      <button
-        onClick={function(e) { handlePlay(e, true); }}
-        title="Écouter lentement"
-        style={{
-          background: state === "slow" ? T.gold : "transparent",
-          border: "1.5px solid " + (state === "slow" ? T.gold : T.border),
-          borderRadius: 20,
-          padding: "0 10px",
-          height: size + 16,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          transition: "all 0.2s",
-          flexShrink: 0,
-          fontSize: 11,
-          fontWeight: 700,
-          color: state === "slow" ? "white" : T.muted,
-        }}
-      >
-        🐢 lent
-      </button>
-    </div>
-  );
-}
-
-// ── VocabCard ─────────────────────────────────────────────────────────────────
-function VocabCard({ item }) {
-  const [flipped, setFlipped] = useState(false);
   return (
     <div
-      onClick={function() { setFlipped(function(f) { return !f; }); }}
+      onClick={() => speak(item.ar)}
       style={{
-        cursor: "pointer",
-        borderRadius: 14,
-        border: "1.5px solid " + (flipped ? T.blue : T.border),
-        background: flipped ? T.ink : T.card,
-        minHeight: 130,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        padding: "18px 16px",
-        gap: 8,
-        transition: "all 0.2s",
-        userSelect: "none",
+        cursor: "pointer", borderRadius: 28, background: C.card,
+        border: `2px solid ${C.border}`, height: 280,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 18, boxShadow: "0 6px 20px rgba(0,0,0,0.08)", userSelect: "none",
       }}
     >
-      {!flipped ? (
-        <>
-          <div style={{ fontSize: 17, fontWeight: 600, color: T.ink }}>{item.fr}</div>
-          {item.note && <div style={{ fontSize: 12, color: T.muted }}>{item.note}</div>}
-          <div style={{ fontSize: 11, color: T.blue, marginTop: 4 }}>Taper pour voir en arabe</div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: 34, fontWeight: 700, color: "white", direction: "rtl", fontFamily: "serif", textAlign: "center" }}>{item.ar}</div>
-          <div style={{ fontSize: 15, color: T.gold, textAlign: "center", fontStyle: "italic" }}>{item.tl}</div>
-          {item.note && <div style={{ fontSize: 11, color: "#8ab4ac", textAlign: "center" }}>💡 {item.note}</div>}
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-            <AudioBtn text={item.ar} />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ── SentenceCard ──────────────────────────────────────────────────────────────
-function SentenceCard({ item }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{
-      borderRadius: 14,
-      border: "1.5px solid " + T.border,
-      background: T.card,
-      padding: "18px 20px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10,
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ fontSize: 26, fontWeight: 700, color: T.ink, direction: "rtl", fontFamily: "serif", flex: 1, textAlign: "right" }}>
-          {item.ar}
-        </div>
-        <AudioBtn text={item.ar} />
+      <div style={{
+        width: 140, height: 140, borderRadius: "50%", background: C.sageSoft,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <EmojiImg emoji={item.emoji} peepSeed={item.peepSeed} size={92} />
       </div>
-      <div style={{ fontSize: 14, fontStyle: "italic", color: T.blue }}>{item.tl}</div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: T.ink }}>{item.fr}</div>
-      <button
-        onClick={function() { setOpen(function(o) { return !o; }); }}
-        style={{
-          background: open ? T.blueSoft : "transparent",
-          border: "1px solid " + (open ? T.blue : T.border),
-          borderRadius: 8,
-          padding: "6px 12px",
-          fontSize: 12,
-          cursor: "pointer",
-          color: T.blue,
-          alignSelf: "flex-start",
-          fontWeight: 600,
-        }}
-      >
-        {open ? "▾ Structure" : "▸ Voir la structure"}
-      </button>
-      {open && (
-        <div style={{ background: T.blueSoft, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: T.blue }}>
-          🔍 {item.structure}
-        </div>
-      )}
+      <div style={{ fontSize: 34, fontWeight: 700, color: C.ink, direction: "rtl", fontFamily: "Georgia, serif" }}>{item.ar}</div>
+      <button onClick={(e) => { e.stopPropagation(); speak(item.ar); }} style={{
+        width: 64, height: 64, borderRadius: 32, background: C.sage, border: "none",
+        color: "white", fontSize: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 14px rgba(74,93,82,0.35)",
+      }}>🔊</button>
     </div>
   );
 }
 
-// ── ModuleView ────────────────────────────────────────────────────────────────
-function ModuleView({ module, onBack }) {
-  const [tab, setTab] = useState("vocab");
-  const tabs = [
-    { id: "vocab",    label: "Vocabulaire (" + module.vocab.length + ")" },
-    { id: "phrases",  label: "Phrases (" + module.sentences.length + ")" },
-    { id: "quiz",     label: "Quiz rapide" },
-  ];
+// ── KidDeck — swipe through picto cards, no reading needed ────────────────────
+function KidDeck({ items, onBack }) {
+  const [idx, setIdx] = useState(0);
+  const [drag, setDrag] = useState({ x: 0, active: false });
+  const startX = useRef(0);
+  const done = idx >= items.length;
+
+  function next() { setDrag({ x: 0, active: false }); setIdx(i => i + 1); }
+  function onDown(e) { startX.current = e.clientX ?? e.touches?.[0]?.clientX ?? 0; setDrag({ x: 0, active: true }); }
+  function onMove(e) { if (!drag.active) return; setDrag({ x: (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - startX.current, active: true }); }
+  function onUp() { if (!drag.active) return; if (Math.abs(drag.x) > 80) next(); else setDrag({ x: 0, active: false }); }
+
+  if (done) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 70, marginBottom: 16 }}>🎉</div>
+        <button onClick={onBack} style={{ background: C.sage, color: "white", border: "none", borderRadius: 16, padding: "16px 32px", fontSize: 17, fontWeight: 700, cursor: "pointer" }}>
+          Recommencer
+        </button>
+      </div>
+    );
+  }
+
+  const current = items[idx];
+  const rot = drag.x / 18;
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 14, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 4 }}>
-        ← Retour
-      </button>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <span style={{ fontSize: 32 }}>{module.icon}</span>
-        <h2 style={{ margin: 0, fontSize: 20, color: T.ink, fontWeight: 800 }}>{module.titleFr}</h2>
+      {/* dots progress, no numbers */}
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}>
+        {items.map((_, i) => (
+          <div key={i} style={{ width: i === idx ? 20 : 8, height: 8, borderRadius: 4, background: i === idx ? C.sage : C.border, transition: "all 0.2s" }} />
+        ))}
       </div>
-      <div style={{ display: "flex", gap: 4, background: "#EEEBE4", borderRadius: 10, padding: 4, marginBottom: 20 }}>
-        {tabs.map(function(t) {
-          return (
-            <button
-              key={t.id}
-              onClick={function() { setTab(t.id); }}
-              style={{
-                flex: 1,
-                background: tab === t.id ? T.card : "transparent",
-                border: "none",
-                borderRadius: 8,
-                padding: "9px 8px",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-                color: tab === t.id ? T.ink : T.muted,
-                boxShadow: tab === t.id ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
-                transition: "all 0.2s",
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
+
+      <div style={{ position: "relative", height: 300, marginBottom: 28 }}>
+        {items[idx + 1] && (
+          <div style={{ position: "absolute", inset: 0, background: C.card, borderRadius: 28, border: `2px solid ${C.border}`, transform: "scale(0.94) translateY(12px)", opacity: 0.5 }} />
+        )}
+        <div
+          onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={() => drag.active && onUp()}
+          onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+          style={{
+            position: "absolute", inset: 0, transform: `translateX(${drag.x}px) rotate(${rot}deg)`,
+            transition: drag.active ? "none" : "transform 0.3s", cursor: "grab",
+          }}
+        >
+          <KidCard item={current} autoPlay={true} key={idx} />
+        </div>
       </div>
-      {tab === "vocab" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
-          {module.vocab.map(function(v, i) { return <VocabCard key={i} item={v} />; })}
-        </div>
-      )}
-      {tab === "phrases" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {module.sentences.map(function(s, i) { return <SentenceCard key={i} item={s} />; })}
-        </div>
-      )}
-      {tab === "quiz" && (
-        <QuizEngine modules={[module]} onBack={function() { setTab("vocab"); }} />
-      )}
+
+      {/* Big visual nav — no text */}
+      <div style={{ display: "flex", justifyContent: "center", gap: 24 }}>
+        <button onClick={onBack} style={{
+          width: 60, height: 60, borderRadius: 30, background: C.card, border: `2px solid ${C.border}`,
+          fontSize: 24, cursor: "pointer", color: C.muted,
+        }}>🏠</button>
+        <button onClick={next} style={{
+          width: 60, height: 60, borderRadius: 30, background: C.sage, border: "none",
+          fontSize: 26, cursor: "pointer", color: "white", boxShadow: "0 4px 14px rgba(74,93,82,0.35)",
+        }}>→</button>
+      </div>
     </div>
   );
 }
 
-// ── QuizEngine ────────────────────────────────────────────────────────────────
-function shuffle(arr) {
-  var a = arr.slice();
-  for (var i = a.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
-    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-  }
-  return a;
-}
+// ── KidQuiz — listen and tap the matching picture ──────────────────────────────
+function KidQuiz({ allItems, onBack }) {
+  const [questions] = useState(() => shuffle(allItems).slice(0, 6).map(q => ({
+    q, options: shuffle([...shuffle(allItems.filter(x => x.tl !== q.tl)).slice(0, 2), q]),
+  })));
+  const [idx, setIdx] = useState(0);
+  const [feedback, setFeedback] = useState(null);
+  const [score, setScore] = useState(0);
+  const done = idx >= questions.length;
+  const cur = !done ? questions[idx] : null;
 
-function QuizEngine({ modules, onBack }) {
-  var allVocab = [];
-  modules.forEach(function(m) { m.vocab.forEach(function(v) { allVocab.push(v); }); });
-
-  var [questions] = useState(function() {
-    var pool = shuffle(allVocab).slice(0, 8);
-    return pool.map(function(q) {
-      var wrong = shuffle(allVocab.filter(function(x) { return x.tl !== q.tl; })).slice(0, 3);
-      return { q: q, options: shuffle(wrong.concat([q])) };
-    });
-  });
-
-  var [idx, setIdx] = useState(0);
-  var [chosen, setChosen] = useState(null);
-  var [score, setScore] = useState(0);
-  var [done, setDone] = useState(false);
-
-  var cur = questions[idx];
+  useEffect(() => {
+    if (cur) { const t = setTimeout(() => speak(cur.q.ar), 400); return () => clearTimeout(t); }
+  }, [idx]);
 
   function pick(opt) {
-    if (chosen) return;
-    setChosen(opt.tl);
-    if (opt.tl === cur.q.tl) setScore(function(s) { return s + 1; });
-  }
-
-  function next() {
-    if (idx + 1 >= questions.length) { setDone(true); }
-    else { setIdx(function(i) { return i + 1; }); setChosen(null); }
+    if (feedback) return;
+    const correct = opt.tl === cur.q.tl;
+    setFeedback(correct ? "good" : "bad");
+    if (correct) setScore(s => s + 1);
+    setTimeout(() => { setFeedback(null); setIdx(i => i + 1); }, correct ? 900 : 1300);
   }
 
   if (done) {
-    var pct = Math.round(score / questions.length * 100);
     return (
-      <div style={{ textAlign: "center", padding: "48px 0" }}>
-        <div style={{ fontSize: 72, marginBottom: 16 }}>{pct >= 80 ? "🏆" : pct >= 50 ? "💪" : "📚"}</div>
-        <div style={{ fontSize: 42, fontWeight: 800, color: T.ink }}>{score}<span style={{ fontSize: 22, color: T.muted }}>/{questions.length}</span></div>
-        <div style={{ fontSize: 16, color: T.muted, margin: "12px 0 32px" }}>
-          {pct >= 80 ? "Excellent niveau !" : pct >= 50 ? "Continue comme ça !" : "Revois les leçons et réessaie !"}
+      <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 70, marginBottom: 12 }}>{score >= questions.length * 0.7 ? "🏆" : "🌟"}</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 28 }}>
+          {Array.from({ length: questions.length }).map((_, i) => (
+            <span key={i} style={{ fontSize: 24 }}>{i < score ? "⭐" : "·"}</span>
+          ))}
         </div>
-        <button onClick={onBack} style={{ background: T.ink, color: "white", border: "none", borderRadius: 10, padding: "14px 32px", fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
-          Retour
+        <button onClick={onBack} style={{ background: C.sage, color: "white", border: "none", borderRadius: 16, padding: "16px 32px", fontSize: 17, fontWeight: 700, cursor: "pointer" }}>
+          Rejouer
         </button>
       </div>
     );
@@ -516,321 +467,294 @@ function QuizEngine({ modules, onBack }) {
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 14, fontWeight: 700, marginBottom: 20, display: "flex", alignItems: "center", gap: 4 }}>
-        ← Retour
-      </button>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, alignItems: "center" }}>
-        <div style={{ height: 6, background: T.border, borderRadius: 4, flex: 1, marginRight: 12, overflow: "hidden" }}>
-          <div style={{ width: ((idx / questions.length) * 100) + "%", height: "100%", background: T.blue, borderRadius: 4, transition: "width 0.3s" }} />
-        </div>
-        <span style={{ fontSize: 13, color: T.muted, whiteSpace: "nowrap" }}>{idx + 1} / {questions.length}</span>
-        <span style={{ fontSize: 13, color: T.gold, fontWeight: 700, marginLeft: 12 }}>★ {score}</span>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 24 }}>
+        {questions.map((_, i) => <div key={i} style={{ width: i === idx ? 20 : 8, height: 8, borderRadius: 4, background: i <= idx ? C.sage : C.border }} />)}
       </div>
-      <div style={{ background: T.ink, borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 13, color: "#888", marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>Traduire en arabe libanais</div>
-        <div style={{ fontSize: 26, fontWeight: 700, color: "white" }}>{cur.q.fr}</div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {cur.options.map(function(opt, i) {
-          var bg = T.card, border = T.border;
-          if (chosen) {
-            if (opt.tl === cur.q.tl) { bg = "#e8f5e9"; border = T.green; }
-            else if (opt.tl === chosen) { bg = "#ffebee"; border = T.red; }
+
+      <button onClick={() => speak(cur.q.ar)} style={{
+        display: "block", margin: "0 auto 28px", width: 96, height: 96, borderRadius: 48,
+        background: C.ink, border: "none", color: "white", fontSize: 38, cursor: "pointer",
+        boxShadow: "0 6px 20px rgba(0,0,0,0.2)",
+      }}>🔊</button>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+        {cur.options.map((opt, i) => {
+          let bg = C.card, border = C.border, scale = 1;
+          if (feedback) {
+            if (opt.tl === cur.q.tl) { bg = "#EAF3EC"; border = C.green; scale = feedback === "good" ? 1.06 : 1; }
+            else if (feedback === "bad") { /* leave neutral */ }
           }
           return (
-            <button key={i} onClick={function() { pick(opt); }} style={{ background: bg, border: "2px solid " + border, borderRadius: 12, padding: "14px 10px", cursor: "pointer", transition: "all 0.2s" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: T.ink, direction: "rtl", fontFamily: "serif" }}>{opt.ar}</div>
-              <div style={{ fontSize: 12, color: T.muted, marginTop: 4, fontStyle: "italic" }}>{opt.tl}</div>
+            <button key={i} onClick={() => pick(opt)} style={{
+              background: bg, border: `3px solid ${border}`, borderRadius: 22,
+              height: 110, cursor: "pointer", transform: `scale(${scale})`,
+              transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <EmojiImg emoji={opt.emoji} peepSeed={opt.peepSeed} size={64} />
             </button>
           );
         })}
       </div>
-      {chosen && (
-        <button onClick={next} style={{ marginTop: 16, width: "100%", background: T.ink, color: "white", border: "none", borderRadius: 10, padding: "14px", fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
-          {idx + 1 >= questions.length ? "Voir les résultats" : "Question suivante →"}
-        </button>
-      )}
     </div>
   );
 }
 
-// ── AIChat ────────────────────────────────────────────────────────────────────
+// ── Adult mode components (intermediate/advanced) ─────────────────────────────
+function SentenceCard({ item }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderRadius: 16, border: `1.5px solid ${C.border}`, background: C.card, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ fontSize: 24, fontWeight: 700, color: C.ink, direction: "rtl", fontFamily: "Georgia, serif", flex: 1, textAlign: "right", lineHeight: 1.4 }}>{item.ar}</div>
+        <button onClick={() => speak(item.ar)} style={{ background: "none", border: `1.5px solid ${C.border}`, borderRadius: 18, width: 36, height: 36, cursor: "pointer", color: C.sage, flexShrink: 0 }}>▶</button>
+      </div>
+      <div style={{ fontSize: 13, fontStyle: "italic", color: C.sage }}>{item.tl}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{item.fr}</div>
+      <button onClick={() => setOpen(o => !o)} style={{ background: "none", border: "none", padding: 0, fontSize: 12, cursor: "pointer", color: C.sage, alignSelf: "flex-start", fontWeight: 600, textDecoration: "underline" }}>
+        {open ? "Masquer la structure" : "Voir la structure"}
+      </button>
+      {open && <div style={{ background: C.sageSoft, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: C.ink }}>{item.structure}</div>}
+    </div>
+  );
+}
+
+function SwipeDeck({ vocab, onBack }) {
+  const [idx, setIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [drag, setDrag] = useState({ x: 0, active: false });
+  const startX = useRef(0);
+  const done = idx >= vocab.length;
+  const current = !done ? vocab[idx] : null;
+
+  function advance() { setFlipped(false); setDrag({ x: 0, active: false }); setIdx(i => i + 1); }
+  function onDown(e) { startX.current = e.clientX ?? e.touches?.[0]?.clientX ?? 0; setDrag({ x: 0, active: true }); }
+  function onMove(e) { if (!drag.active) return; setDrag({ x: (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - startX.current, active: true }); }
+  function onUp() { if (!drag.active) return; if (Math.abs(drag.x) > 90) advance(); else setDrag({ x: 0, active: false }); }
+
+  if (done) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, marginBottom: 20 }}>Terminé</div>
+        <button onClick={onBack} style={{ background: C.card, color: C.ink, border: `1.5px solid ${C.border}`, borderRadius: 12, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Retour</button>
+      </div>
+    );
+  }
+
+  const rot = drag.x / 18;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.sage, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>← Retour</button>
+        <span style={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>{idx + 1} / {vocab.length}</span>
+      </div>
+      <div style={{ height: 4, background: C.border, borderRadius: 4, marginBottom: 28, overflow: "hidden" }}>
+        <div style={{ width: `${(idx / vocab.length) * 100}%`, height: "100%", background: C.sage, transition: "width 0.3s" }} />
+      </div>
+      <div style={{ position: "relative", height: 340, marginBottom: 24 }}>
+        {vocab[idx + 1] && <div style={{ position: "absolute", inset: 0, background: C.card, borderRadius: 20, border: `1.5px solid ${C.border}`, transform: "scale(0.95) translateY(10px)", opacity: 0.6 }} />}
+        <div
+          onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={() => drag.active && onUp()}
+          onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+          onClick={() => !drag.x && setFlipped(f => !f)}
+          style={{
+            position: "absolute", inset: 0, borderRadius: 20, cursor: "grab",
+            background: flipped ? C.sage : C.card, border: `1.5px solid ${flipped ? C.sage : C.border}`,
+            transform: `translateX(${drag.x}px) rotate(${rot}deg)`,
+            transition: drag.active ? "none" : "transform 0.3s, background 0.2s",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            padding: "32px 28px", userSelect: "none", boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+          }}
+        >
+          {!flipped ? (
+            <>
+              <div style={{ fontSize: 26, fontWeight: 700, color: C.ink, textAlign: "center", marginBottom: 10 }}>{current.fr}</div>
+              {current.note && <div style={{ fontSize: 13, color: C.muted, textAlign: "center", maxWidth: 240 }}>{current.note}</div>}
+              <div style={{ fontSize: 12, color: C.sage, marginTop: 20, fontWeight: 600 }}>Toucher pour révéler</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 42, fontWeight: 700, color: "white", direction: "rtl", fontFamily: "Georgia, serif", textAlign: "center", marginBottom: 10 }}>{current.ar}</div>
+              <div style={{ fontSize: 17, color: "rgba(255,255,255,0.85)", fontStyle: "italic", marginBottom: 16 }}>{current.tl}</div>
+              <button onClick={(e) => { e.stopPropagation(); speak(current.ar); }} style={{ background: "rgba(255,255,255,0.15)", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 24, padding: "8px 18px", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Écouter</button>
+            </>
+          )}
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <button onClick={advance} style={{ background: C.sage, color: "white", border: "none", borderRadius: 14, padding: "14px 40px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Suivant</button>
+      </div>
+    </div>
+  );
+}
+
+function ModuleView({ module, onBack }) {
+  const [tab, setTab] = useState("vocab");
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: C.sage, cursor: "pointer", fontSize: 14, fontWeight: 700, marginBottom: 20 }}>← Retour</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+        <span style={{ fontSize: 28 }}>{module.icon}</span>
+        <h2 style={{ margin: 0, fontSize: 20, color: C.ink, fontWeight: 700 }}>{module.titleFr}</h2>
+      </div>
+      <div style={{ display: "flex", borderBottom: `1.5px solid ${C.border}`, marginBottom: 24 }}>
+        {[{ id: "vocab", label: "Vocabulaire" }, { id: "phrases", label: "Phrases" }].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", borderBottom: tab === t.id ? `2px solid ${C.sage}` : "2px solid transparent", padding: "10px 4px", marginRight: 24, cursor: "pointer", fontSize: 14, fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? C.ink : C.muted }}>{t.label}</button>
+        ))}
+      </div>
+      {tab === "vocab" && <SwipeDeck vocab={module.vocab} onBack={() => setTab("phrases")} />}
+      {tab === "phrases" && <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>{module.sentences.map((s, i) => <SentenceCard key={i} item={s} />)}</div>}
+    </div>
+  );
+}
+
 function AIChat({ onBack }) {
-  var [msgs, setMsgs] = useState([]);
-  var [apiMsgs, setApiMsgs] = useState([]);
-  var [input, setInput] = useState("");
-  var [loading, setLoading] = useState(false);
-  var endRef = useRef(null);
-
-  var starters = [
-    "Comment conjuguer les verbes au présent en libanais ?",
-    "Quelle est la différence entre baddī et urīd ?",
-    "Apprenez-moi à faire une phrase négative",
-    "Donne-moi 5 mots libanais qu'on utilise tout le temps",
-    "Comment exprimer la politesse au Liban ?",
-  ];
-
-  useEffect(function() {
-    if (endRef.current) endRef.current.scrollIntoView({ behavior: "smooth" });
-  }, [msgs]);
+  const [msgs, setMsgs] = useState([]);
+  const [apiMsgs, setApiMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const endRef = useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+  const starters = ["Conjuguer les verbes au présent", "Différence entre baddī et urīd", "Phrase négative", "5 mots libanais essentiels"];
 
   function send(text) {
     if (!text.trim() || loading) return;
-    var um = { role: "user", content: text };
-    var newApi = apiMsgs.concat([um]);
-    setMsgs(function(m) { return m.concat([{ role: "user", text: text }]); });
+    const um = { role: "user", content: text };
+    const newApi = [...apiMsgs, um];
+    setMsgs(m => [...m, { role: "user", text }]);
     setApiMsgs(newApi);
     setInput("");
     setLoading(true);
     fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        system: "Tu es un professeur expert en arabe libanais (dialecte ʿAmmiyye). Tu enseignes à des francophones.\nRègles :\n- Toujours enseigner le DIALECTE LIBANAIS, jamais l'arabe standard (MSA)\n- Pour chaque mot/phrase : donne le script arabe, la translittération phonétique, et la traduction française\n- Explique les nuances grammaticales simplement (négation mā/mish, présent avec ʿam, futur avec raḥ)\n- Sois chaleureux, encourageant, précis\n- Réponds TOUJOURS en français",
-        messages: newApi,
-      }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: "Tu es un professeur expert en arabe libanais (dialecte ʿAmmiyye). Réponds toujours en français.", messages: newApi }),
     })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var reply = "";
-      if (data.content) {
-        data.content.forEach(function(b) { if (b.type === "text") reply += b.text; });
-      }
-      if (!reply) reply = "Erreur de réponse.";
-      setMsgs(function(m) { return m.concat([{ role: "assistant", text: reply }]); });
-      setApiMsgs(function(m) { return m.concat([{ role: "assistant", content: reply }]); });
-    })
-    .catch(function() {
-      setMsgs(function(m) { return m.concat([{ role: "assistant", text: "Erreur de connexion. Réessaye." }]); });
-    })
-    .finally(function() { setLoading(false); });
+    .then(r => r.json())
+    .then(data => { const reply = data.content?.find(b => b.type === "text")?.text || "Erreur."; setMsgs(m => [...m, { role: "assistant", text: reply }]); setApiMsgs(m => [...m, { role: "assistant", content: reply }]); })
+    .catch(() => setMsgs(m => [...m, { role: "assistant", text: "Erreur de connexion." }]))
+    .finally(() => setLoading(false));
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "72vh" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 14, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-        ← Retour
-      </button>
+    <div style={{ display: "flex", flexDirection: "column", height: "75vh" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: C.sage, cursor: "pointer", fontSize: 14, fontWeight: 700, marginBottom: 14, alignSelf: "flex-start" }}>← Retour</button>
       <div style={{ flexShrink: 0, marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {starters.map(function(s, i) {
-          return (
-            <button key={i} onClick={function() { send(s); }} style={{ background: T.goldSoft, border: "1px solid " + T.gold, borderRadius: 20, padding: "6px 14px", fontSize: 12, cursor: "pointer", color: T.gold, fontWeight: 600 }}>
-              {s}
-            </button>
-          );
-        })}
+        {starters.map((s, i) => <button key={i} onClick={() => send(s)} style={{ background: C.card, border: `1.5px solid ${C.border}`, borderRadius: 16, padding: "7px 14px", fontSize: 12, cursor: "pointer", color: C.sage, fontWeight: 600 }}>{s}</button>)}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", background: "#F0EDE8", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {msgs.length === 0 && (
-          <div style={{ margin: "auto", textAlign: "center", color: T.muted }}>
-            <div style={{ fontSize: 48, marginBottom: 8, direction: "rtl", fontFamily: "serif" }}>مرحبا</div>
-            <p style={{ fontSize: 14 }}>Pose-moi n'importe quelle question sur le dialecte libanais</p>
+      <div style={{ flex: 1, overflowY: "auto", background: C.sageSoft, borderRadius: 18, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        {msgs.length === 0 && <div style={{ margin: "auto", textAlign: "center", color: C.muted, fontSize: 14 }}>Pose une question sur l'arabe libanais</div>}
+        {msgs.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+            <div style={{ background: m.role === "user" ? C.sage : C.card, color: m.role === "user" ? "white" : C.ink, borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "12px 16px", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.text}</div>
           </div>
-        )}
-        {msgs.map(function(m, i) {
-          return (
-            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-              <div style={{
-                background: m.role === "user" ? T.ink : T.card,
-                color: m.role === "user" ? "white" : T.ink,
-                borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                padding: "12px 16px", fontSize: 14, lineHeight: 1.65,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.07)", whiteSpace: "pre-wrap",
-              }}>{m.text}</div>
-            </div>
-          );
-        })}
-        {loading && (
-          <div style={{ alignSelf: "flex-start", background: T.card, borderRadius: "18px 18px 18px 4px", padding: "14px 18px", boxShadow: "0 2px 8px rgba(0,0,0,0.07)", color: T.muted, fontSize: 22, letterSpacing: 4 }}>•••</div>
-        )}
+        ))}
+        {loading && <div style={{ alignSelf: "flex-start", background: C.card, borderRadius: "16px 16px 16px 4px", padding: "14px 18px", fontSize: 20, letterSpacing: 4, color: C.muted }}>···</div>}
         <div ref={endRef} />
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexShrink: 0 }}>
-        <input
-          value={input}
-          onChange={function(e) { setInput(e.target.value); }}
-          onKeyDown={function(e) { if (e.key === "Enter") send(input); }}
-          placeholder="Pose ta question en français…"
-          style={{ flex: 1, padding: "13px 18px", borderRadius: 24, border: "2px solid " + T.border, fontSize: 14, outline: "none", background: T.card }}
-        />
-        <button
-          onClick={function() { send(input); }}
-          disabled={loading || !input.trim()}
-          style={{ background: T.ink, color: "white", border: "none", borderRadius: 24, padding: "13px 22px", cursor: "pointer", fontSize: 16, opacity: (loading || !input.trim()) ? 0.4 : 1 }}
-        >
-          ↑
-        </button>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send(input)} placeholder="Ta question…" style={{ flex: 1, padding: "13px 16px", borderRadius: 20, border: `1.5px solid ${C.border}`, fontSize: 14, outline: "none" }} />
+        <button onClick={() => send(input)} disabled={loading || !input.trim()} style={{ background: C.sage, color: "white", border: "none", borderRadius: 20, padding: "13px 20px", cursor: "pointer", fontSize: 15, opacity: loading || !input.trim() ? 0.4 : 1 }}>→</button>
       </div>
     </div>
   );
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-var levelColors = { beginner: T.green, intermediate: T.blue, advanced: T.gold };
-
 export default function App() {
-  var [level, setLevel] = useState("beginner");
-  var [view, setView] = useState("home");
-  var [activeModule, setActiveModule] = useState(null);
-  var [audioReady, setAudioReady] = useState(false);
-  var [voiceName, setVoiceName] = useState("");
+  const [mode, setMode] = useState("kid"); // kid | adult
+  const [level, setLevel] = useState("intermediate"); // for adult mode
+  const [view, setView] = useState("home");
+  const [activeModule, setActiveModule] = useState(null);
+  const [kidModule, setKidModule] = useState(null);
 
-  function handleUnlock() {
-    setAudioReady(true);
-  }
+  const allKidItems = KID_MODULES.flatMap(m => m.items);
+  const currentTextModules = TEXT_MODULES[level] || [];
 
-  if (!audioReady) {
+  // ── Kid mode (picto, audio-first, no reading) ────────────────────────────────
+  if (mode === "kid") {
     return (
-      <div
-        onClick={handleUnlock}
-        style={{ minHeight: "100vh", background: T.ink, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Segoe UI', system-ui, sans-serif", textAlign: "center", cursor: "pointer" }}
-      >
-        <div style={{ fontSize: 72, marginBottom: 20, direction: "rtl", fontFamily: "serif", color: T.gold }}>عربي</div>
-        <h1 style={{ color: "white", fontSize: 24, fontWeight: 800, margin: "0 0 10px" }}>Arabe Libanais</h1>
-        <p style={{ color: "#888", fontSize: 14, margin: "0 0 12px", lineHeight: 1.7 }}>
-          Voix : <strong style={{ color: T.gold }}>Rami — ar-LB (Azure)</strong>
-        </p>
-        <p style={{ color: "#666", fontSize: 13, margin: "0 0 36px", lineHeight: 1.7 }}>
-          Appuie n'importe où pour démarrer
-        </p>
-        <div style={{ background: T.gold, color: T.ink, borderRadius: 16, padding: "18px 44px", fontSize: 18, fontWeight: 800 }}>
-          Démarrer ▶
+      <div style={{ minHeight: "100vh", background: C.paper, fontFamily: "'Segoe UI', system-ui, sans-serif", color: C.ink }}>
+        <div style={{ borderBottom: `1.5px solid ${C.border}`, padding: "0 16px" }}>
+          <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+            <div onClick={() => { setView("home"); setKidModule(null); }} style={{ cursor: "pointer", fontSize: 16, fontWeight: 700 }}>🇱🇧 Arabe</div>
+            <button onClick={() => { setMode("adult"); setView("home"); }} style={{ background: "none", border: `1.5px solid ${C.border}`, borderRadius: 16, padding: "6px 14px", color: C.muted, cursor: "pointer", fontSize: 12 }}>Mode parent</button>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "24px 16px" }}>
+          {view === "home" && !kidModule && (
+            <>
+              <button onClick={() => setView("kidquiz")} style={{
+                width: "100%", background: C.ink, color: "white", border: "none", borderRadius: 20,
+                padding: "20px", fontSize: 20, fontWeight: 700, cursor: "pointer", marginBottom: 20,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+              }}>
+                🎧 Écoute et trouve
+              </button>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+                {KID_MODULES.map(m => (
+                  <button key={m.id} onClick={() => { setKidModule(m); }} style={{
+                    background: C.card, border: `2px solid ${C.border}`, borderRadius: 22,
+                    padding: "26px 14px", cursor: "pointer", textAlign: "center",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                  }}>
+                    <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
+                      <EmojiImg emoji={m.icon} size={56} />
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>{m.title}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {kidModule && <KidDeck items={kidModule.items} onBack={() => setKidModule(null)} />}
+          {view === "kidquiz" && <KidQuiz allItems={allKidItems} onBack={() => setView("home")} />}
         </div>
       </div>
     );
   }
 
-  var currentModules = MODULES[level] || [];
-  var lc = levelColors[level];
-
+  // ── Adult mode (text, structure, AI tutor) ───────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: T.paper, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: T.ink }}>
-
-      {/* Header */}
-      <div style={{ background: T.ink, padding: "0 20px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
-          <div
-            style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
-            onClick={function() { setView("home"); }}
-          >
-            <div style={{ fontSize: 22, direction: "rtl", fontFamily: "serif", color: T.gold, fontWeight: 700, letterSpacing: 2 }}>عربي</div>
-            <div>
-              <div style={{ color: "white", fontSize: 15, fontWeight: 700 }}>Arabe Libanais</div>
-              {voiceName ? <div style={{ color: "#666", fontSize: 10, marginTop: 1 }}>🔊 {voiceName}</div> : null}
-            </div>
+    <div style={{ minHeight: "100vh", background: C.paper, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: C.ink }}>
+      <div style={{ borderBottom: `1.5px solid ${C.border}`, padding: "0 16px" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+          <div onClick={() => setView("home")} style={{ cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Arabe Libanais</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setView("chat")} style={{ background: "none", border: `1.5px solid ${C.border}`, borderRadius: 16, padding: "7px 16px", color: C.ink, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Tuteur</button>
+            <button onClick={() => { setMode("kid"); setView("home"); }} style={{ background: C.sage, border: "none", borderRadius: 16, padding: "7px 16px", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Mode enfant</button>
           </div>
-          <button
-            onClick={function() { setView("chat"); }}
-            style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 20, padding: "7px 16px", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-          >
-            💬 Tuteur IA
-          </button>
         </div>
       </div>
 
-      {/* Level tabs */}
       {view === "home" && (
-        <div style={{ background: "white", borderBottom: "1px solid " + T.border, padding: "0 20px" }}>
-          <div style={{ maxWidth: 720, margin: "0 auto", display: "flex" }}>
-            {LEVELS.map(function(l) {
-              return (
-                <button
-                  key={l.id}
-                  onClick={function() { setLevel(l.id); }}
-                  style={{
-                    background: "none", border: "none",
-                    borderBottom: level === l.id ? "3px solid " + levelColors[l.id] : "3px solid transparent",
-                    padding: "14px 20px", cursor: "pointer", fontSize: 14,
-                    fontWeight: level === l.id ? 700 : 500,
-                    color: level === l.id ? levelColors[l.id] : T.muted,
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {l.fr}
-                </button>
-              );
-            })}
+        <div style={{ borderBottom: `1.5px solid ${C.border}`, padding: "0 16px" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto", display: "flex" }}>
+            {[{ id: "intermediate", fr: "Intermédiaire" }, { id: "advanced", fr: "Avancé" }].map(l => (
+              <button key={l.id} onClick={() => setLevel(l.id)} style={{ background: "none", border: "none", borderBottom: level === l.id ? `2px solid ${C.sage}` : "2px solid transparent", padding: "13px 16px", cursor: "pointer", fontSize: 13, fontWeight: level === l.id ? 700 : 500, color: level === l.id ? C.ink : C.muted }}>{l.fr}</button>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Body */}
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 16px" }}>
-
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px" }}>
         {view === "home" && (
-          <>
-            {/* Hero */}
-            <div style={{ background: "linear-gradient(135deg, #0F0F0F 0%, #2a2a2a 100%)", borderRadius: 20, padding: "28px 24px", marginBottom: 24, position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", right: 20, top: "50%", transform: "translateY(-50%)", fontSize: 80, opacity: 0.07, direction: "rtl", fontFamily: "serif", lineHeight: 1 }}>
-                {level === "beginner" ? "أهلاً" : level === "intermediate" ? "كيفك" : "يعني"}
-              </div>
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "inline-block", background: lc, borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "white", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-                  {LEVELS.find(function(l) { return l.id === level; }).fr}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {currentTextModules.map(mod => (
+              <button key={mod.id} onClick={() => { setActiveModule(mod); setView("module"); }} style={{ background: C.card, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ fontSize: 24 }}>{mod.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: C.ink }}>{mod.titleFr}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{mod.vocab.length} mots · {mod.sentences.length} phrases</div>
                 </div>
-                <h2 style={{ color: "white", margin: "0 0 8px", fontSize: 20, fontWeight: 800 }}>
-                  {level === "beginner" ? "Les bases du dialecte libanais" : level === "intermediate" ? "Conversations du quotidien" : "Expressions & nuances avancées"}
-                </h2>
-                <p style={{ color: "#999", margin: 0, fontSize: 13 }}>
-                  {LEVELS.find(function(l) { return l.id === level; }).desc}
-                </p>
-              </div>
-            </div>
-
-            {/* Module list */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
-              {currentModules.map(function(mod) {
-                return (
-                  <button
-                    key={mod.id}
-                    onClick={function() { setActiveModule(mod); setView("module"); }}
-                    style={{ background: T.card, border: "1.5px solid " + T.border, borderRadius: 14, padding: "18px 20px", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 16, transition: "all 0.2s" }}
-                    onMouseEnter={function(e) { e.currentTarget.style.borderColor = lc; e.currentTarget.style.transform = "translateX(4px)"; }}
-                    onMouseLeave={function(e) { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = "none"; }}
-                  >
-                    <span style={{ fontSize: 30, flexShrink: 0 }}>{mod.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 16, color: T.ink }}>{mod.titleFr}</div>
-                      <div style={{ fontSize: 13, color: T.muted, marginTop: 2 }}>{mod.vocab.length} mots · {mod.sentences.length} phrases</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ background: T.blueSoft, color: T.blue, borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 600 }}>Vocab</span>
-                      <span style={{ background: T.goldSoft, color: T.gold, borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 600 }}>Phrases</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Quiz CTA */}
-            <button
-              onClick={function() { setView("quiz"); }}
-              style={{ width: "100%", background: T.ink, color: "white", border: "none", borderRadius: 14, padding: "16px", fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-            >
-              <span style={{ fontSize: 20 }}>🎯</span> Quiz — niveau {LEVELS.find(function(l) { return l.id === level; }).fr}
-            </button>
-
-            {/* Note */}
-            <div style={{ marginTop: 20, background: T.card, border: "1px solid " + T.border, borderRadius: 14, padding: "16px 20px" }}>
-              <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>💡 Pourquoi le dialecte libanais</div>
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.65, color: T.ink }}>
-                L'arabe libanais (<em>ʿAmmiyye</em>) est le vrai arabe parlé à Beyrouth, Jbeil et dans les familles libanaises. Il diffère de l'arabe standard par son vocabulaire (<em>baddī</em> au lieu de <em>urīd</em>), sa syntaxe, et ses nombreux emprunts au français et à l'anglais.
-              </p>
-            </div>
-          </>
+                <span style={{ color: C.muted }}>→</span>
+              </button>
+            ))}
+          </div>
         )}
-
-        {view === "module" && activeModule && (
-          <ModuleView module={activeModule} onBack={function() { setView("home"); }} />
-        )}
-        {view === "quiz" && (
-          <QuizEngine modules={currentModules} onBack={function() { setView("home"); }} />
-        )}
-        {view === "chat" && (
-          <AIChat onBack={function() { setView("home"); }} />
-        )}
+        {view === "module" && activeModule && <ModuleView module={activeModule} onBack={() => setView("home")} />}
+        {view === "chat" && <AIChat onBack={() => setView("home")} />}
       </div>
     </div>
   );
