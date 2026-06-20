@@ -17,24 +17,11 @@ const T = {
 
 // ── TTS — via /api/tts Vercel proxy → Azure ar-LB-RamiNeural ─────────────────
 let currentAudio = null;
-let currentObjectURL = null;
 
 async function speak(text, slow) {
-  // Stop and fully destroy previous audio
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.onended = null;
-    currentAudio.onerror = null;
-    currentAudio.src = "";
-    currentAudio.load(); // iOS requires load() after clearing src
-    currentAudio = null;
-  }
-  if (currentObjectURL) {
-    URL.revokeObjectURL(currentObjectURL);
-    currentObjectURL = null;
-  }
-
   try {
+    if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; }
+
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,18 +32,9 @@ async function speak(text, slow) {
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    currentObjectURL = url;
-
-    const audio = new Audio();
-    audio.src = url; // set src after creation — more reliable on iOS
+    const audio = new Audio(url);
     currentAudio = audio;
-
-    audio.onended = function() {
-      URL.revokeObjectURL(url);
-      currentObjectURL = null;
-      currentAudio = null;
-    };
-
+    audio.onended = function() { URL.revokeObjectURL(url); };
     await audio.play();
 
   } catch (err) {
@@ -88,62 +66,62 @@ const MODULES = {
     {
       id: "greetings", icon: "👋", titleFr: "Salutations",
       vocab: [
-        { ar: "مَرْحَبا",      tl: "Marḥaba",         fr: "Bonjour / Salut",       note: "La salutation universelle" },
-        { ar: "كِيفَك؟",     tl: "Kīfak? / Kīfik?", fr: "Comment tu vas ?",       note: "-ak (homme) / -ik (femme)" },
-        { ar: "مْنِيح",       tl: "Mnīḥ",            fr: "Bien / Bon",             note: "Mot clé du dialecte libanais" },
-        { ar: "شُكْراً",      tl: "Shukran",         fr: "Merci",                  note: "" },
-        { ar: "عَفْواً",      tl: "ʿAfwan",          fr: "De rien / Pardon",       note: "" },
-        { ar: "صَباحْ الخِير", tl: "Ṣabāḥ el-kheir", fr: "Bonjour (matin)",        note: "Réponse : Ṣabāḥ el-nūr" },
-        { ar: "مَساءْ الخِير", tl: "Masā el-kheir",  fr: "Bonsoir",                note: "Réponse : Masā el-nūr" },
-        { ar: "يَلّا باي",    tl: "Yalla bye",       fr: "Au revoir !",            note: "Mix arabe-anglais typiquement libanais" },
+        { ar: "مرحبا",      tl: "Marḥaba",         fr: "Bonjour / Salut",       note: "La salutation universelle" },
+        { ar: "كيفك؟",     tl: "Kīfak? / Kīfik?", fr: "Comment tu vas ?",       note: "-ak (homme) / -ik (femme)" },
+        { ar: "منيح",       tl: "Mnīḥ",            fr: "Bien / Bon",             note: "Mot clé du dialecte libanais" },
+        { ar: "شكراً",      tl: "Shukran",         fr: "Merci",                  note: "" },
+        { ar: "عفواً",      tl: "ʿAfwan",          fr: "De rien / Pardon",       note: "" },
+        { ar: "صباح الخير", tl: "Ṣabāḥ el-kheir", fr: "Bonjour (matin)",        note: "Réponse : Ṣabāḥ el-nūr" },
+        { ar: "مساء الخير", tl: "Masā el-kheir",  fr: "Bonsoir",                note: "Réponse : Masā el-nūr" },
+        { ar: "يلا باي",    tl: "Yalla bye",       fr: "Au revoir !",            note: "Mix arabe-anglais typiquement libanais" },
       ],
       sentences: [
-        { ar: "مَرْحَبا! كِيفَك؟",                 tl: "Marḥaba! Kīfak?",               fr: "Bonjour ! Comment tu vas ?",                structure: "Salutation + Question" },
-        { ar: "مْنِيح كْتِير، شُكْراً",              tl: "Mnīḥ ktīr, shukran",            fr: "Très bien, merci",                          structure: "Adjectif + ktīr (très) + merci" },
-        { ar: "شو اِسْمَك؟",                     tl: "Shu ismak?",                    fr: "Comment tu t'appelles ?",                   structure: "Shu (quoi) + ism (nom) + -ak (toi)" },
-        { ar: "مِن وِين إِنْتَ؟",                  tl: "Min wein inta?",                fr: "Tu viens d'où ?",                           structure: "Min (de) + wein (où) + inta (tu, masc.)" },
-        { ar: "أَنا مِن كَنَدا، بَس أَصْلِي لُبْنانِي",  tl: "Ana min Kanada, bas aṣlī Libnānī", fr: "Je suis du Canada, mais d'origine libanaise", structure: "Ana min + pays + bas (mais) + aṣlī (mes origines)" },
+        { ar: "مرحبا! كيفك؟",                 tl: "Marḥaba! Kīfak?",               fr: "Bonjour ! Comment tu vas ?",                structure: "Salutation + Question" },
+        { ar: "منيح كتير، شكراً",              tl: "Mnīḥ ktīr, shukran",            fr: "Très bien, merci",                          structure: "Adjectif + ktīr (très) + merci" },
+        { ar: "شو اسمك؟",                     tl: "Shu ismak?",                    fr: "Comment tu t'appelles ?",                   structure: "Shu (quoi) + ism (nom) + -ak (toi)" },
+        { ar: "من وين انت؟",                  tl: "Min wein inta?",                fr: "Tu viens d'où ?",                           structure: "Min (de) + wein (où) + inta (tu, masc.)" },
+        { ar: "أنا من كندا، بس أصلي لبناني",  tl: "Ana min Kanada, bas aṣlī Libnānī", fr: "Je suis du Canada, mais d'origine libanaise", structure: "Ana min + pays + bas (mais) + aṣlī (mes origines)" },
       ],
     },
     {
       id: "numbers", icon: "🔢", titleFr: "Nombres & Temps",
       vocab: [
-        { ar: "وَاحَد",   tl: "Wāḥad",  fr: "Un",          note: "" },
-        { ar: "تْنِين",   tl: "Tnayn",  fr: "Deux",         note: "Libanais : tnayn (MSA : ithnān)" },
-        { ar: "تْلاتَة",  tl: "Tlāte",  fr: "Trois",        note: "" },
-        { ar: "أَرْبَعَة",  tl: "Arbaʿa", fr: "Quatre",       note: "" },
-        { ar: "خَمْسَة",   tl: "Khamse", fr: "Cinq",         note: "" },
-        { ar: "عَشَرَة",   tl: "ʿAshra", fr: "Dix",          note: "" },
-        { ar: "هَلَّق",    tl: "Hallaʾ", fr: "Maintenant",   note: "Très libanais" },
-        { ar: "بُكْرا",   tl: "Bukra",  fr: "Demain",       note: "" },
-        { ar: "إِمْبارِح", tl: "Embāriḥ",fr: "Hier",         note: "" },
+        { ar: "واحد",   tl: "Wāḥad",  fr: "Un",          note: "" },
+        { ar: "تنين",   tl: "Tnayn",  fr: "Deux",         note: "Libanais : tnayn (MSA : ithnān)" },
+        { ar: "تلاتة",  tl: "Tlāte",  fr: "Trois",        note: "" },
+        { ar: "أربعة",  tl: "Arbaʿa", fr: "Quatre",       note: "" },
+        { ar: "خمسة",   tl: "Khamse", fr: "Cinq",         note: "" },
+        { ar: "عشرة",   tl: "ʿAshra", fr: "Dix",          note: "" },
+        { ar: "هلق",    tl: "Hallaʾ", fr: "Maintenant",   note: "Très libanais" },
+        { ar: "بكرا",   tl: "Bukra",  fr: "Demain",       note: "" },
+        { ar: "امبارح", tl: "Embāriḥ",fr: "Hier",         note: "" },
       ],
       sentences: [
-        { ar: "قَدِّيش السّاعَة؟",      tl: "Addeish el-sāʿa?",      fr: "Quelle heure est-il ?",       structure: "Addeish (combien) + sāʿa (heure)" },
-        { ar: "السّاعَة تْلاتَة",      tl: "El-sāʿa tlāte",         fr: "Il est trois heures",         structure: "El-sāʿa + nombre" },
-        { ar: "قَدِّيش هَالشِّي؟",       tl: "Addeish hal-shī?",      fr: "Combien ça coûte ?",          structure: "Addeish + hal (ce) + shī (chose)" },
-        { ar: "بُكْرا رَح نْشوف بَعْض", tl: "Bukra raḥ nshūf baʿd", fr: "Demain on se voit",           structure: "Bukra + raḥ (futur) + verbe" },
-        { ar: "هَلَّق ما عِنْدِي وَقَت",  tl: "Hallaʾ mā ʿandī waʾt", fr: "Là je n'ai pas le temps",    structure: "Hallaʾ + mā (pas) + ʿandī (j'ai)" },
+        { ar: "قديش الساعة؟",      tl: "Addeish el-sāʿa?",      fr: "Quelle heure est-il ?",       structure: "Addeish (combien) + sāʿa (heure)" },
+        { ar: "الساعة تلاتة",      tl: "El-sāʿa tlāte",         fr: "Il est trois heures",         structure: "El-sāʿa + nombre" },
+        { ar: "قديش هالشي؟",       tl: "Addeish hal-shī?",      fr: "Combien ça coûte ?",          structure: "Addeish + hal (ce) + shī (chose)" },
+        { ar: "بكرا رح نشوف بعض", tl: "Bukra raḥ nshūf baʿd", fr: "Demain on se voit",           structure: "Bukra + raḥ (futur) + verbe" },
+        { ar: "هلق ما عندي وقت",  tl: "Hallaʾ mā ʿandī waʾt", fr: "Là je n'ai pas le temps",    structure: "Hallaʾ + mā (pas) + ʿandī (j'ai)" },
       ],
     },
     {
       id: "family", icon: "👨‍👩‍👧", titleFr: "Famille",
       vocab: [
-        { ar: "مامَا",    tl: "Māma",    fr: "Maman",          note: "" },
-        { ar: "بابَا",    tl: "Bāba",    fr: "Papa",           note: "" },
-        { ar: "تِيتَا",    tl: "Teta",    fr: "Grand-mère",     note: "Très courant au Liban" },
-        { ar: "جِدُّو",     tl: "Jeddo",   fr: "Grand-père",     note: "" },
-        { ar: "خَيِّي",      tl: "Khayye",  fr: "Frère",          note: "Forme affectueuse libanaise" },
-        { ar: "خْتِي",     tl: "Khté",    fr: "Sœur",           note: "" },
-        { ar: "عَمُّو",     tl: "ʿAmmo",   fr: "Oncle",          note: "Aussi pour les hommes plus âgés" },
-        { ar: "حَبِيبِي",   tl: "Ḥabībī",  fr: "Mon chéri (m)", note: "Terme d'affection omniprésent" },
-        { ar: "حَبِيبْتِي",  tl: "Ḥabībti", fr: "Ma chérie (f)", note: "" },
+        { ar: "ماما",    tl: "Māma",    fr: "Maman",          note: "" },
+        { ar: "بابا",    tl: "Bāba",    fr: "Papa",           note: "" },
+        { ar: "تيتا",    tl: "Teta",    fr: "Grand-mère",     note: "Très courant au Liban" },
+        { ar: "جدو",     tl: "Jeddo",   fr: "Grand-père",     note: "" },
+        { ar: "خي",      tl: "Khayye",  fr: "Frère",          note: "Forme affectueuse libanaise" },
+        { ar: "ختي",     tl: "Khté",    fr: "Sœur",           note: "" },
+        { ar: "عمو",     tl: "ʿAmmo",   fr: "Oncle",          note: "Aussi pour les hommes plus âgés" },
+        { ar: "حبيبي",   tl: "Ḥabībī",  fr: "Mon chéri (m)", note: "Terme d'affection omniprésent" },
+        { ar: "حبيبتي",  tl: "Ḥabībti", fr: "Ma chérie (f)", note: "" },
       ],
       sentences: [
-        { ar: "هَيْدا أَخُوي",         tl: "Hayda akhūye",       fr: "C'est mon frère",             structure: "Hayda (c'est lui) + akhūye (mon frère)" },
-        { ar: "عِنْدِي تْلَت وْلاد",     tl: "ʿAndī tlāt wlād",   fr: "J'ai trois enfants",          structure: "ʿAndī (j'ai) + nombre + wlād (enfants)" },
-        { ar: "كِيف حال مامَاتَك؟",   tl: "Kīf ḥāl māmātak?", fr: "Comment va ta maman ?",       structure: "Kīf ḥāl (comment va) + māmātak (ta maman)" },
-        { ar: "عِيلْتِي كْبِيرَة كْتِير",  tl: "ʿEylté kbīre ktīr", fr: "Ma famille est très grande", structure: "ʿEylté (ma famille) + kbīre + ktīr (très)" },
+        { ar: "هيدا اخوي",         tl: "Hayda akhūye",       fr: "C'est mon frère",             structure: "Hayda (c'est lui) + akhūye (mon frère)" },
+        { ar: "عندي تلت ولاد",     tl: "ʿAndī tlāt wlād",   fr: "J'ai trois enfants",          structure: "ʿAndī (j'ai) + nombre + wlād (enfants)" },
+        { ar: "كيف حال ماماتك؟",   tl: "Kīf ḥāl māmātak?", fr: "Comment va ta maman ?",       structure: "Kīf ḥāl (comment va) + māmātak (ta maman)" },
+        { ar: "عيلتي كبيرة كتير",  tl: "ʿEylté kbīre ktīr", fr: "Ma famille est très grande", structure: "ʿEylté (ma famille) + kbīre + ktīr (très)" },
       ],
     },
   ],
@@ -151,62 +129,62 @@ const MODULES = {
     {
       id: "daily", icon: "🌆", titleFr: "Vie quotidienne",
       vocab: [
-        { ar: "يَلّا",      tl: "Yalla",     fr: "Allez ! On y va !",        note: "LE mot libanais par excellence" },
-        { ar: "شو فِي؟",   tl: "Shu fī?",   fr: "Qu'est-ce qu'il y a ?",   note: "Shu = quoi (pas mādhā en libanais)" },
-        { ar: "ما فِي",    tl: "Mā fī",     fr: "Il n'y a pas / Rien",      note: "" },
-        { ar: "بَدِّي",      tl: "Baddī",     fr: "Je veux",                  note: "Pas urīd — baddī est le mot libanais" },
-        { ar: "ما بَدِّي",   tl: "Mā baddī",  fr: "Je ne veux pas",           note: "" },
-        { ar: "قَدِّيش؟",    tl: "Addeish?",  fr: "Combien ?",                note: "" },
-        { ar: "بَس",       tl: "Bas",       fr: "Mais / Seulement / Stop",  note: "3 sens selon le contexte !" },
-        { ar: "لازِم",     tl: "Lāzim",     fr: "Il faut / Je dois",        note: "" },
-        { ar: "مِش لازِم",  tl: "Mish lāzim",fr: "Ce n'est pas obligé",     note: "Mish = négation libanaise" },
-        { ar: "وَاللَّه",    tl: "Wallāh",    fr: "Franchement / Vraiment",   note: "Juron doux, très fréquent" },
+        { ar: "يلا",      tl: "Yalla",     fr: "Allez ! On y va !",        note: "LE mot libanais par excellence" },
+        { ar: "شو في؟",   tl: "Shu fī?",   fr: "Qu'est-ce qu'il y a ?",   note: "Shu = quoi (pas mādhā en libanais)" },
+        { ar: "ما في",    tl: "Mā fī",     fr: "Il n'y a pas / Rien",      note: "" },
+        { ar: "بدي",      tl: "Baddī",     fr: "Je veux",                  note: "Pas urīd — baddī est le mot libanais" },
+        { ar: "ما بدي",   tl: "Mā baddī",  fr: "Je ne veux pas",           note: "" },
+        { ar: "قديش؟",    tl: "Addeish?",  fr: "Combien ?",                note: "" },
+        { ar: "بس",       tl: "Bas",       fr: "Mais / Seulement / Stop",  note: "3 sens selon le contexte !" },
+        { ar: "لازم",     tl: "Lāzim",     fr: "Il faut / Je dois",        note: "" },
+        { ar: "مش لازم",  tl: "Mish lāzim",fr: "Ce n'est pas obligé",     note: "Mish = négation libanaise" },
+        { ar: "والله",    tl: "Wallāh",    fr: "Franchement / Vraiment",   note: "Juron doux, très fréquent" },
       ],
       sentences: [
-        { ar: "شو عَم تَعْمَل هَلَّق؟",          tl: "Shu ʿam taʿmal hallaʾ?",      fr: "Qu'est-ce que tu fais là ?",       structure: "Shu + ʿam (présent continu) + verbe + hallaʾ" },
-        { ar: "عَم شْتَغَل مِن البِيت",          tl: "ʿam shtghel min el-beit",      fr: "Je travaille de la maison",        structure: "ʿam (en train de) + verbe + min el-beit" },
-        { ar: "بَدِّي رُوح عَالسوبِرْماركِت",      tl: "Baddī rūḥ ʿa el-supermarket", fr: "Je veux aller au supermarché",    structure: "Baddī (je veux) + rūḥ (aller) + lieu" },
-        { ar: "ما عِنْدِي مُشْكِلَة",            tl: "Mā ʿandī mushkle",             fr: "Pas de problème / Pas de souci",  structure: "Mā (pas) + ʿandī (j'ai) + mushkle" },
-        { ar: "شو رَأْيَك؟",                 tl: "Shu raʾyak?",                  fr: "Tu en penses quoi ?",             structure: "Shu (quoi) + raʾyak (ton avis)" },
-        { ar: "وَاللَّه ما بَعْرِف",            tl: "Wallāh mā baʿrif",             fr: "Franchement je sais pas",         structure: "Wallāh + mā (pas) + baʿrif (je sais)" },
+        { ar: "شو عم تعمل هلق؟",          tl: "Shu ʿam taʿmal hallaʾ?",      fr: "Qu'est-ce que tu fais là ?",       structure: "Shu + ʿam (présent continu) + verbe + hallaʾ" },
+        { ar: "عم شتغل من البيت",          tl: "ʿam shtghel min el-beit",      fr: "Je travaille de la maison",        structure: "ʿam (en train de) + verbe + min el-beit" },
+        { ar: "بدي روح عالسوبرماركت",      tl: "Baddī rūḥ ʿa el-supermarket", fr: "Je veux aller au supermarché",    structure: "Baddī (je veux) + rūḥ (aller) + lieu" },
+        { ar: "ما عندي مشكلة",            tl: "Mā ʿandī mushkle",             fr: "Pas de problème / Pas de souci",  structure: "Mā (pas) + ʿandī (j'ai) + mushkle" },
+        { ar: "شو رأيك؟",                 tl: "Shu raʾyak?",                  fr: "Tu en penses quoi ?",             structure: "Shu (quoi) + raʾyak (ton avis)" },
+        { ar: "والله ما بعرف",            tl: "Wallāh mā baʿrif",             fr: "Franchement je sais pas",         structure: "Wallāh + mā (pas) + baʿrif (je sais)" },
       ],
     },
     {
       id: "feelings", icon: "💬", titleFr: "Émotions & Opinions",
       vocab: [
-        { ar: "مَبْسوط",     tl: "Mabsūṭ",   fr: "Content / Heureux",       note: "-a au féminin : mabsūṭa" },
-        { ar: "زَعْلان",     tl: "Zaʿlān",   fr: "Triste / Fâché",          note: "-e féminin : zaʿlāne" },
-        { ar: "تَعْبان",     tl: "Taʿbān",   fr: "Fatigué / Épuisé",        note: "-e féminin : taʿbāne" },
-        { ar: "كْتِير حِلْو",  tl: "Ktīr ḥelo",fr: "Très beau / Très bien",   note: "Ḥelo = beau, bon, sympa" },
-        { ar: "يِسْلَمو",     tl: "Yislamo",  fr: "Merci du fond du cœur",   note: "Litt. 'que tes mains soient bénies'" },
-        { ar: "اَللَّه!",     tl: "Allāh!",   fr: "Waouh ! Mon Dieu !",      note: "Surprise, admiration" },
-        { ar: "وْلاه",      tl: "Wlāh",     fr: "Sérieusement ?! Oh là",   note: "Très expressif, très libanais" },
-        { ar: "ما شاءَ اللَّه",tl: "Māshallāh",fr: "Comme c'est beau !",     note: "Admiration + protection du mauvais œil" },
+        { ar: "مبسوط",     tl: "Mabsūṭ",   fr: "Content / Heureux",       note: "-a au féminin : mabsūṭa" },
+        { ar: "زعلان",     tl: "Zaʿlān",   fr: "Triste / Fâché",          note: "-e féminin : zaʿlāne" },
+        { ar: "تعبان",     tl: "Taʿbān",   fr: "Fatigué / Épuisé",        note: "-e féminin : taʿbāne" },
+        { ar: "كتير حلو",  tl: "Ktīr ḥelo",fr: "Très beau / Très bien",   note: "Ḥelo = beau, bon, sympa" },
+        { ar: "يسلمو",     tl: "Yislamo",  fr: "Merci du fond du cœur",   note: "Litt. 'que tes mains soient bénies'" },
+        { ar: "الله!",     tl: "Allāh!",   fr: "Waouh ! Mon Dieu !",      note: "Surprise, admiration" },
+        { ar: "ولاه",      tl: "Wlāh",     fr: "Sérieusement ?! Oh là",   note: "Très expressif, très libanais" },
+        { ar: "ما شاء الله",tl: "Māshallāh",fr: "Comme c'est beau !",     note: "Admiration + protection du mauvais œil" },
       ],
       sentences: [
-        { ar: "أَنا مَبْسوط كْتِير",             tl: "Ana mabsūṭ ktīr",              fr: "Je suis tellement content",       structure: "Ana + état + ktīr (très)" },
-        { ar: "بْحِبَّك كْتِير",                  tl: "Bḥibbak ktīr",                 fr: "Je t'aime beaucoup",              structure: "Bḥibb- (j'aime) + -ak/-ik (toi) + ktīr" },
-        { ar: "حاسِس حالِي تَعْبان اليَوم",      tl: "Ḥāssis ḥāle taʿbān el-yōm",  fr: "Je me sens fatigué aujourd'hui",  structure: "Ḥāssis ḥāle (je me sens) + état + el-yōm" },
-        { ar: "هَالأَكَل كْتِير حِلْو، يِسْلَمو إِيدِيكِي", tl: "Hal-akl ktīr ḥelo, yislamo īdēki", fr: "Ce repas est délicieux, bravo !", structure: "Hal- (ce) + objet + ḥelo + yislamo (formule de gratitude)" },
+        { ar: "أنا مبسوط كتير",             tl: "Ana mabsūṭ ktīr",              fr: "Je suis tellement content",       structure: "Ana + état + ktīr (très)" },
+        { ar: "بحبك كتير",                  tl: "Bḥibbak ktīr",                 fr: "Je t'aime beaucoup",              structure: "Bḥibb- (j'aime) + -ak/-ik (toi) + ktīr" },
+        { ar: "حاسس حالي تعبان اليوم",      tl: "Ḥāssis ḥāle taʿbān el-yōm",  fr: "Je me sens fatigué aujourd'hui",  structure: "Ḥāssis ḥāle (je me sens) + état + el-yōm" },
+        { ar: "هالأكل كتير حلو، يسلمو إيديكي", tl: "Hal-akl ktīr ḥelo, yislamo īdēki", fr: "Ce repas est délicieux, bravo !", structure: "Hal- (ce) + objet + ḥelo + yislamo (formule de gratitude)" },
       ],
     },
     {
       id: "transport", icon: "🚗", titleFr: "Déplacements",
       vocab: [
-        { ar: "وِين؟",      tl: "Wein?",        fr: "Où ?",                note: "Wein, pas ayna en libanais" },
-        { ar: "كِيف بْروح؟", tl: "Kīf brūḥ?",   fr: "Comment j'y vais ?",  note: "" },
-        { ar: "قْرِيب",      tl: "Arīb",         fr: "Proche / Près",       note: "" },
-        { ar: "بْعِيد",      tl: "Baʿīd",        fr: "Loin",                note: "" },
-        { ar: "دُغْرِي",      tl: "Dughri",       fr: "Tout droit",          note: "Mot d'origine turque !" },
-        { ar: "عَالشِّمال",   tl: "ʿa el-shamāl", fr: "À gauche",           note: "" },
-        { ar: "عَالْيَمِين",   tl: "ʿa el-yamīn",  fr: "À droite",           note: "" },
-        { ar: "سِرْفِيس",     tl: "Service",      fr: "Taxi collectif",      note: "Transport typique au Liban" },
+        { ar: "وين؟",      tl: "Wein?",        fr: "Où ?",                note: "Wein, pas ayna en libanais" },
+        { ar: "كيف بروح؟", tl: "Kīf brūḥ?",   fr: "Comment j'y vais ?",  note: "" },
+        { ar: "قريب",      tl: "Arīb",         fr: "Proche / Près",       note: "" },
+        { ar: "بعيد",      tl: "Baʿīd",        fr: "Loin",                note: "" },
+        { ar: "دغري",      tl: "Dughri",       fr: "Tout droit",          note: "Mot d'origine turque !" },
+        { ar: "عالشمال",   tl: "ʿa el-shamāl", fr: "À gauche",           note: "" },
+        { ar: "عاليمين",   tl: "ʿa el-yamīn",  fr: "À droite",           note: "" },
+        { ar: "سرفيس",     tl: "Service",      fr: "Taxi collectif",      note: "Transport typique au Liban" },
       ],
       sentences: [
-        { ar: "وِين المَطار؟",                       tl: "Wein el-maṭār?",                     fr: "Où est l'aéroport ?",              structure: "Wein (où) + lieu" },
-        { ar: "كِيف بْروح عَالمَطار؟",                 tl: "Kīf brūḥ ʿa el-maṭār?",             fr: "Comment je vais à l'aéroport ?",  structure: "Kīf (comment) + brūḥ (je vais) + ʿa (à) + lieu" },
-        { ar: "رُوح دُغْرِي وبَعْدِين دور عَالشِّمال",       tl: "Rūḥ dughri w baʿdein dūr ʿa el-shamāl", fr: "Vas tout droit puis tourne à gauche", structure: "Impératif + dughri + w (et) + baʿdein (puis)" },
-        { ar: "قَدِّيش تَعَرَّفْنِي عَالمَحَطَّة؟",              tl: "Addeish taʿrufnī ʿa el-maḥaṭṭa?",  fr: "Combien pour la gare ?",          structure: "Addeish (combien) + verbe + ʿa (à) + lieu" },
+        { ar: "وين المطار؟",                       tl: "Wein el-maṭār?",                     fr: "Où est l'aéroport ?",              structure: "Wein (où) + lieu" },
+        { ar: "كيف بروح عالمطار؟",                 tl: "Kīf brūḥ ʿa el-maṭār?",             fr: "Comment je vais à l'aéroport ?",  structure: "Kīf (comment) + brūḥ (je vais) + ʿa (à) + lieu" },
+        { ar: "روح دغري وبعدين دور عالشمال",       tl: "Rūḥ dughri w baʿdein dūr ʿa el-shamāl", fr: "Vas tout droit puis tourne à gauche", structure: "Impératif + dughri + w (et) + baʿdein (puis)" },
+        { ar: "قديش تعرفني عالمحطة؟",              tl: "Addeish taʿrufnī ʿa el-maḥaṭṭa?",  fr: "Combien pour la gare ?",          structure: "Addeish (combien) + verbe + ʿa (à) + lieu" },
       ],
     },
   ],
@@ -214,65 +192,65 @@ const MODULES = {
     {
       id: "idioms", icon: "🎭", titleFr: "Expressions idiomatiques",
       vocab: [
-        { ar: "يِعْطِيك العافْيِة",  tl: "Yʿaṭīk el-ʿāfye",  fr: "Bravo / Bon courage",         note: "Pour remercier quelqu'un qui travaille" },
-        { ar: "عَلى راسِي",       tl: "ʿAla rāsī",         fr: "Avec plaisir / Bien sûr",     note: "Marque de respect absolu" },
-        { ar: "قَلْبَك أَبْيَض",     tl: "Albak abyaḍ",       fr: "Tu as un cœur d'or",          note: "Grand compliment de générosité" },
-        { ar: "طَوِّل بالَك",       tl: "Ṭawwel bālak",      fr: "Sois patient",                note: "Litt. 'allonge ton esprit'" },
-        { ar: "اللَّه يِرْحَمو",     tl: "Allah yirḥamo",     fr: "Qu'il repose en paix",        note: "En parlant d'un défunt" },
-        { ar: "إِنْشَاللَّه",        tl: "Inshallāh",         fr: "Si Dieu le veut",             note: "Peut signifier oui, peut-être ou non selon le ton !" },
-        { ar: "الحَمْدُ لِلَّه",      tl: "El-ḥamdu lillāh",  fr: "Dieu merci / Tout va bien",   note: "Réponse courante à 'comment tu vas'" },
-        { ar: "يِخْزِي العِين",    tl: "Ykhzī el-ʿein",    fr: "Contre le mauvais œil",       note: "Dit après un compliment" },
+        { ar: "يعطيك العافية",  tl: "Yʿaṭīk el-ʿāfye",  fr: "Bravo / Bon courage",         note: "Pour remercier quelqu'un qui travaille" },
+        { ar: "على راسي",       tl: "ʿAla rāsī",         fr: "Avec plaisir / Bien sûr",     note: "Marque de respect absolu" },
+        { ar: "قلبك أبيض",     tl: "Albak abyaḍ",       fr: "Tu as un cœur d'or",          note: "Grand compliment de générosité" },
+        { ar: "طول بالك",       tl: "Ṭawwel bālak",      fr: "Sois patient",                note: "Litt. 'allonge ton esprit'" },
+        { ar: "الله يرحمو",     tl: "Allah yirḥamo",     fr: "Qu'il repose en paix",        note: "En parlant d'un défunt" },
+        { ar: "إنشالله",        tl: "Inshallāh",         fr: "Si Dieu le veut",             note: "Peut signifier oui, peut-être ou non selon le ton !" },
+        { ar: "الحمد لله",      tl: "El-ḥamdu lillāh",  fr: "Dieu merci / Tout va bien",   note: "Réponse courante à 'comment tu vas'" },
+        { ar: "يخزي العين",    tl: "Ykhzī el-ʿein",    fr: "Contre le mauvais œil",       note: "Dit après un compliment" },
       ],
       sentences: [
-        { ar: "يِعْطِيك العافْيِة عَلى كِلّ هَالشُّغَل",    tl: "Yʿaṭīk el-ʿāfye ʿala kell hal-shughl", fr: "Bravo pour tout ce travail",          structure: "Formule de bénédiction + ʿala (sur) + objet" },
-        { ar: "إِنْشَاللَّه بُكْرا يْكون أَحْسَن",         tl: "Inshallāh bukra ykūn aḥsan",            fr: "Espérons que demain ce sera mieux",   structure: "Inshallāh + bukra + ykūn (sera) + aḥsan (mieux)" },
-        { ar: "الحَمْدُ لِلَّه، ما فِي شِي ناقِصْنا",     tl: "El-ḥamdu lillāh, mā fī shī nāʾisna",   fr: "Dieu merci, on ne manque de rien",    structure: "Formule de gratitude + mā fī (il n'y a pas) + nāʾisna" },
-        { ar: "طَوِّل بالَك، هَالأُمور بْتِمْشِي",         tl: "Ṭawwel bālak, hal-umūr btimshī",        fr: "Sois patient, les choses avancent",   structure: "Impératif + hal-umūr (ces affaires) + btimshī (marchent)" },
+        { ar: "يعطيك العافية على كل هالشغل",    tl: "Yʿaṭīk el-ʿāfye ʿala kell hal-shughl", fr: "Bravo pour tout ce travail",          structure: "Formule de bénédiction + ʿala (sur) + objet" },
+        { ar: "إنشالله بكرا يكون أحسن",         tl: "Inshallāh bukra ykūn aḥsan",            fr: "Espérons que demain ce sera mieux",   structure: "Inshallāh + bukra + ykūn (sera) + aḥsan (mieux)" },
+        { ar: "الحمد لله، ما في شي ناقصنا",     tl: "El-ḥamdu lillāh, mā fī shī nāʾisna",   fr: "Dieu merci, on ne manque de rien",    structure: "Formule de gratitude + mā fī (il n'y a pas) + nāʾisna" },
+        { ar: "طول بالك، هالأمور بتمشي",         tl: "Ṭawwel bālak, hal-umūr btimshī",        fr: "Sois patient, les choses avancent",   structure: "Impératif + hal-umūr (ces affaires) + btimshī (marchent)" },
       ],
     },
     {
       id: "storytelling", icon: "🗣️", titleFr: "Raconter & Débattre",
       vocab: [
-        { ar: "يَعْنِي",      tl: "Yaʿni",       fr: "C'est-à-dire / Genre",       note: "Mot de remplissage universel libanais" },
-        { ar: "هِيك وهِيك",  tl: "Hēk w hēk",   fr: "Comme ci comme ça",          note: "" },
-        { ar: "بَالضَّبَط",    tl: "Bil-ẓabaṭ",   fr: "Exactement / Précisément",   note: "" },
-        { ar: "مِش هِيك؟",   tl: "Mish hēk?",   fr: "N'est-ce pas ? Tu vois ?",   note: "Tag question très fréquente" },
-        { ar: "بَالعَكَس",    tl: "Bil-ʿaks",    fr: "Au contraire",               note: "" },
-        { ar: "عَالأَقَل",    tl: "ʿAl-aʾall",   fr: "Au moins",                   note: "" },
-        { ar: "كَأَنُّو",      tl: "Kaʾanno",     fr: "Comme si / On dirait que",   note: "" },
-        { ar: "خَلِّينِي أَفْهَم",tl: "Khallinī afham",fr: "Laisse-moi comprendre",   note: "" },
+        { ar: "يعني",      tl: "Yaʿni",       fr: "C'est-à-dire / Genre",       note: "Mot de remplissage universel libanais" },
+        { ar: "هيك وهيك",  tl: "Hēk w hēk",   fr: "Comme ci comme ça",          note: "" },
+        { ar: "بالظبط",    tl: "Bil-ẓabaṭ",   fr: "Exactement / Précisément",   note: "" },
+        { ar: "مش هيك؟",   tl: "Mish hēk?",   fr: "N'est-ce pas ? Tu vois ?",   note: "Tag question très fréquente" },
+        { ar: "بالعكس",    tl: "Bil-ʿaks",    fr: "Au contraire",               note: "" },
+        { ar: "عالأقل",    tl: "ʿAl-aʾall",   fr: "Au moins",                   note: "" },
+        { ar: "كأنو",      tl: "Kaʾanno",     fr: "Comme si / On dirait que",   note: "" },
+        { ar: "خليني أفهم",tl: "Khallinī afham",fr: "Laisse-moi comprendre",   note: "" },
       ],
       sentences: [
-        { ar: "يَعْنِي، بَدَّك تْقول إِنُّو ما حَدا حَكى مَعَك؟", tl: "Yaʿni, baddak tʾūl inno mā ḥada ḥaka maʿak?", fr: "Genre, tu veux dire que personne ne t'a parlé ?", structure: "Yaʿni + baddak tʾūl (tu veux dire) + inno (que)" },
-        { ar: "بَالضَّبَط هَيْدا اللِّي عَم قُلُّو",             tl: "Bil-ẓabaṭ hayda lli ʿam ʾello",               fr: "C'est exactement ce que je dis",                 structure: "Bil-ẓabaṭ + hayda (ça) + lli (que) + ʿam ʾello (je dis)" },
-        { ar: "بَالعَكَس، هَيْدا بِيساعِدْنا أَكْتَر",          tl: "Bil-ʿaks, hayda bisāʿidna aktar",              fr: "Au contraire, ça nous aide encore plus",          structure: "Bil-ʿaks + hayda + bisāʿidna (aide) + aktar (plus)" },
-        { ar: "خَلِّينِي أَفْهَم شو اللِّي صار بَالضَّبَط",       tl: "Khallinī afham shu lli ṣār bil-ẓabaṭ",        fr: "Laisse-moi comprendre ce qui s'est passé",       structure: "Khallinī (laisse-moi) + verbe + shu lli ṣār (ce qui s'est passé)" },
+        { ar: "يعني، بدك تقول إنو ما حدا حكى معك؟", tl: "Yaʿni, baddak tʾūl inno mā ḥada ḥaka maʿak?", fr: "Genre, tu veux dire que personne ne t'a parlé ?", structure: "Yaʿni + baddak tʾūl (tu veux dire) + inno (que)" },
+        { ar: "بالظبط هيدا اللي عم قلو",             tl: "Bil-ẓabaṭ hayda lli ʿam ʾello",               fr: "C'est exactement ce que je dis",                 structure: "Bil-ẓabaṭ + hayda (ça) + lli (que) + ʿam ʾello (je dis)" },
+        { ar: "بالعكس، هيدا بيساعدنا أكتر",          tl: "Bil-ʿaks, hayda bisāʿidna aktar",              fr: "Au contraire, ça nous aide encore plus",          structure: "Bil-ʿaks + hayda + bisāʿidna (aide) + aktar (plus)" },
+        { ar: "خليني أفهم شو اللي صار بالظبط",       tl: "Khallinī afham shu lli ṣār bil-ẓabaṭ",        fr: "Laisse-moi comprendre ce qui s'est passé",       structure: "Khallinī (laisse-moi) + verbe + shu lli ṣār (ce qui s'est passé)" },
       ],
     },
     {
       id: "culture", icon: "🏛️", titleFr: "Culture & Société",
       vocab: [
-        { ar: "ضْيافَة",        tl: "Ḍiyāfe",      fr: "Hospitalité",               note: "Valeur cardinale libanaise" },
-        { ar: "تْفَضَّل",         tl: "Tfaḍḍal",     fr: "Je vous en prie / Entrez",  note: "Invitation universelle" },
-        { ar: "عَلى صِحَّتَك",     tl: "ʿAla ṣaḥtak", fr: "À ta santé !",              note: "Toast libanais" },
-        { ar: "صَحْتِين",        tl: "Ṣaḥtein",     fr: "Bon appétit ! (deux santés)", note: "Réponse : ʿala albak" },
-        { ar: "أَهْلاً وسَهْلاً", tl: "Ahlan w sahlan",fr: "Bienvenue !",             note: "Litt. 'comme avec la famille et en terrain facile'" },
-        { ar: "عِيب",          tl: "ʿEib",         fr: "C'est honteux / Mal",      note: "Notion sociale forte" },
-        { ar: "مَزْبوط",        tl: "Mazbuṭ",       fr: "C'est juste / Correct",    note: "" },
-        { ar: "كاسَك",         tl: "Kāsak",        fr: "À ta santé (toast) !",     note: "En levant le verre" },
+        { ar: "ضيافة",        tl: "Ḍiyāfe",      fr: "Hospitalité",               note: "Valeur cardinale libanaise" },
+        { ar: "تفضل",         tl: "Tfaḍḍal",     fr: "Je vous en prie / Entrez",  note: "Invitation universelle" },
+        { ar: "على صحتك",     tl: "ʿAla ṣaḥtak", fr: "À ta santé !",              note: "Toast libanais" },
+        { ar: "صحتين",        tl: "Ṣaḥtein",     fr: "Bon appétit ! (deux santés)", note: "Réponse : ʿala albak" },
+        { ar: "أهلاً وسهلاً", tl: "Ahlan w sahlan",fr: "Bienvenue !",             note: "Litt. 'comme avec la famille et en terrain facile'" },
+        { ar: "عيب",          tl: "ʿEib",         fr: "C'est honteux / Mal",      note: "Notion sociale forte" },
+        { ar: "مزبوط",        tl: "Mazbuṭ",       fr: "C'est juste / Correct",    note: "" },
+        { ar: "كاسك",         tl: "Kāsak",        fr: "À ta santé (toast) !",     note: "En levant le verre" },
       ],
       sentences: [
-        { ar: "أَهْلاً وسَهْلاً، البَيْت بَيْتَك",              tl: "Ahlan w sahlan, el-beit betak",                fr: "Bienvenue, cette maison est la tienne",       structure: "Formule d'accueil + el-beit betak (la maison est tienne)" },
-        { ar: "تْفَضَّل، اِتْفَضَّل مَعْنا",                      tl: "Tfaḍḍal, itfaḍḍal maʿna",                     fr: "Je t'en prie, viens avec nous",               structure: "Tfaḍḍal (invitation) + maʿna (avec nous)" },
-        { ar: "الأَكَل اللُّبْناني مِن أَحْسَن أَكَل بَالعالَم",   tl: "El-akl el-Libnānī min aḥsan akl bil-ʿālam",   fr: "La cuisine libanaise est parmi les meilleures", structure: "Sujet + min aḥsan (parmi les meilleurs) + bil-ʿālam (au monde)" },
-        { ar: "الضْيافَة عِنَّا مِش بَس تَقْلِيد، هِيَ قِيمَة",    tl: "El-ḍiyāfe ʿinna mish bas taʾlīd, hiye ʾīme", fr: "L'hospitalité chez nous c'est une valeur",    structure: "Sujet + mish bas (pas seulement) + taʾlīd + hiye (c'est) + valeur" },
+        { ar: "أهلاً وسهلاً، البيت بيتك",              tl: "Ahlan w sahlan, el-beit betak",                fr: "Bienvenue, cette maison est la tienne",       structure: "Formule d'accueil + el-beit betak (la maison est tienne)" },
+        { ar: "تفضل، اتفضل معنا",                      tl: "Tfaḍḍal, itfaḍḍal maʿna",                     fr: "Je t'en prie, viens avec nous",               structure: "Tfaḍḍal (invitation) + maʿna (avec nous)" },
+        { ar: "الأكل اللبناني من أحسن أكل بالعالم",   tl: "El-akl el-Libnānī min aḥsan akl bil-ʿālam",   fr: "La cuisine libanaise est parmi les meilleures", structure: "Sujet + min aḥsan (parmi les meilleurs) + bil-ʿālam (au monde)" },
+        { ar: "الضيافة عنا مش بس تقليد، هي قيمة",    tl: "El-ḍiyāfe ʿinna mish bas taʾlīd, hiye ʾīme", fr: "L'hospitalité chez nous c'est une valeur",    structure: "Sujet + mish bas (pas seulement) + taʾlīd + hiye (c'est) + valeur" },
       ],
     },
   ],
 };
 
 // ── AudioBtn ──────────────────────────────────────────────────────────────────
-function AudioBtn({ text, tl, size }) {
+function AudioBtn({ text, size }) {
   size = size || 18;
   const [state, setState] = useState("idle");
 
@@ -366,7 +344,7 @@ function VocabCard({ item }) {
           <div style={{ fontSize: 15, color: T.gold, textAlign: "center", fontStyle: "italic" }}>{item.tl}</div>
           {item.note && <div style={{ fontSize: 11, color: "#8ab4ac", textAlign: "center" }}>💡 {item.note}</div>}
           <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-            <AudioBtn text={item.ar} tl={item.tl} />
+            <AudioBtn text={item.ar} />
           </div>
         </>
       )}
@@ -391,7 +369,7 @@ function SentenceCard({ item }) {
         <div style={{ fontSize: 26, fontWeight: 700, color: T.ink, direction: "rtl", fontFamily: "serif", flex: 1, textAlign: "right" }}>
           {item.ar}
         </div>
-        <AudioBtn text={item.ar} tl={item.tl} />
+        <AudioBtn text={item.ar} />
       </div>
       <div style={{ fontSize: 14, fontStyle: "italic", color: T.blue }}>{item.tl}</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: T.ink }}>{item.fr}</div>
